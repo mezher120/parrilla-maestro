@@ -1538,6 +1538,7 @@ function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParril
           ))
         )}
       </div>
+      <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} />
       {step === "done" && (
         <div style={{ padding:"8px 13px 24px", flexShrink:0 }}>
           <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
@@ -1778,10 +1779,143 @@ async function getAIConsejo(asados, nombre, idioma) {
   return `${nombre}, ¡excelente consistencia! Seguí así. 🔥`;
 }
 
+// ── CLAUDE VISION ─────────────────────────────────────────────────
+async function analizarFotoAsado(base64DataUrl, cortes, idioma) {
+  const key = import.meta.env.VITE_ANTHROPIC_KEY;
+  if (!key || key.startsWith("sk-ant-api03-REEMPLAZA")) return null;
+  const match = base64DataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  const [, mediaType, base64Data] = match;
+  const validTypes = ["image/jpeg","image/png","image/gif","image/webp"];
+  const safeType = validTypes.includes(mediaType) ? mediaType : "image/jpeg";
+  const cortesList = cortes?.join(", ") || (idioma === "en" ? "unknown cut" : "corte desconocido");
+  const prompt = idioma === "en"
+    ? `You are an expert Argentine grill master. Analyze this BBQ photo. Cuts on the grill: ${cortesList}. Tell me: 1) What cooking point do you see? 2) Is it ready or needs more time? 3) One specific tip. Max 3 short sentences.`
+    : `Sos un maestro parrillero argentino. Analizá esta foto de la parrilla. Cortes: ${cortesList}. Decime: 1) ¿Qué punto de cocción ves? 2) ¿Está listo o necesita más tiempo? 3) Un consejo práctico. Máximo 3 oraciones cortas.`;
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 250,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: safeType, data: base64Data } },
+          { type: "text", text: prompt }
+        ]}]
+      })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.content?.[0]?.text || null;
+  } catch { return null; }
+}
+
+// ── CAMERA ANALYSIS ───────────────────────────────────────────────
+function CameraAnalysis({ cortes, idioma }) {
+  const [open, setOpen] = useState(false);
+  const [foto, setFoto] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [resultado, setResultado] = useState(null);
+  const [error, setError] = useState(false);
+  const fileRef = useRef();
+
+  const hasKey = import.meta.env.VITE_ANTHROPIC_KEY && !import.meta.env.VITE_ANTHROPIC_KEY.startsWith("sk-ant-api03-REEMPLAZA");
+
+  const handleFoto = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      setFoto(ev.target.result);
+      setResultado(null); setError(false); setLoading(true);
+      const res = await analizarFotoAsado(ev.target.result, cortes, idioma);
+      setLoading(false);
+      if (res) setResultado(res); else setError(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const reset = () => { setFoto(null); setResultado(null); setError(false); };
+  const close = () => { setOpen(false); reset(); };
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)} style={{ margin:"8px 13px 0", width:"calc(100% - 26px)", padding:"10px 14px", background:"linear-gradient(135deg,#0d1a0d,#1a2a1a)", border:"1px solid #4caf5044", borderRadius:12, color:"#4caf50", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, flexShrink:0 }}>
+      <span>📷</span>
+      <span>{idioma==="en" ? "Analyze my BBQ with AI" : "Analizá mi asado con IA"}</span>
+      <span style={{ background:"#4caf5033", borderRadius:6, padding:"2px 7px", fontSize:10 }}>✨ AI</span>
+    </button>
+  );
+
+  return (
+    <div style={{ margin:"8px 13px 0", background:"linear-gradient(135deg,#0d1a0d,#122012)", border:"1px solid #4caf5055", borderRadius:14, padding:14, flexShrink:0 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+        <div style={{ color:"#4caf50", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", gap:7 }}>
+          <span>📷</span>
+          <span>{idioma==="en" ? "AI Photo Analysis" : "Análisis con IA"}</span>
+          <span style={{ background:"#4caf5022", borderRadius:6, padding:"1px 7px", fontSize:10 }}>✨ Claude</span>
+        </div>
+        <button onClick={close} style={{ background:"none", border:"none", color:"#555", fontSize:18, cursor:"pointer", lineHeight:1 }}>✕</button>
+      </div>
+
+      {!hasKey && (
+        <div style={{ background:"#2a1a0a", borderRadius:10, padding:"10px 12px", color:"#ff8c42", fontSize:12 }}>
+          ⚠️ {idioma==="en" ? "Add VITE_ANTHROPIC_KEY to your .env file" : "Configurá VITE_ANTHROPIC_KEY en el archivo .env"}
+        </div>
+      )}
+
+      {hasKey && !foto && (
+        <button onClick={() => fileRef.current.click()} style={{ width:"100%", height:70, background:"#0d0a07", border:"2px dashed #4caf5044", borderRadius:12, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:5 }}>
+          <span style={{ fontSize:22 }}>📸</span>
+          <span style={{ color:"#4caf50", fontSize:11 }}>{idioma==="en" ? "Take a photo of the grill" : "Sacá una foto de la parrilla"}</span>
+        </button>
+      )}
+
+      {foto && (
+        <div style={{ position:"relative" }}>
+          <img src={foto} alt="parrilla" style={{ width:"100%", height:130, objectFit:"cover", borderRadius:10, display:"block" }} />
+          <button onClick={reset} style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,.7)", border:"none", borderRadius:"50%", width:24, height:24, color:"white", cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFoto} style={{ display:"none" }} />
+
+      {loading && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
+          {[0,1,2].map(i => <div key={i} style={{ width:5, height:5, borderRadius:"50%", background:"#4caf50", animation:`bounce ${0.5+i*0.15}s ease-in-out infinite alternate` }} />)}
+          <span style={{ color:"#4caf50", fontSize:11 }}>{idioma==="en" ? "Claude is analyzing…" : "Claude está analizando…"}</span>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ marginTop:10, color:"#ff8c42", fontSize:12, padding:"8px 10px", background:"#2a1a0a", borderRadius:8 }}>
+          ⚠️ {idioma==="en" ? "Could not analyze. Check your connection." : "No se pudo analizar. Revisá la conexión."}
+        </div>
+      )}
+
+      {resultado && (
+        <div style={{ marginTop:10, background:"#0d0a07", borderRadius:10, padding:"10px 12px", border:"1px solid #4caf5044", animation:"popIn .3s ease" }}>
+          <div style={{ color:"#4caf50", fontSize:10, fontWeight:700, marginBottom:6 }}>🧠 {idioma==="en" ? "Claude says:" : "Claude dice:"}</div>
+          <div style={{ color:"#c9b49a", fontSize:13, lineHeight:1.6 }}>{resultado}</div>
+          <button onClick={reset} style={{ marginTop:10, background:"none", border:"1px solid #4caf5033", borderRadius:8, padding:"5px 12px", color:"#4caf50", fontSize:11, cursor:"pointer" }}>
+            {idioma==="en" ? "Analyze again" : "Analizar de nuevo"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveAsado, idioma="es", aprendizaje={} }) {
   const [rating, setRating] = useState(null);
   const [nota, setNota] = useState("");
   const [foto, setFoto] = useState(null);
+  const [fotoAnalisis, setFotoAnalisis] = useState(null);
+  const [fotoAnalisisLoading, setFotoAnalisisLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [saved, setSaved] = useState(false);
   const [aiConsejo, setAiConsejo] = useState(null);
@@ -1826,7 +1960,15 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
   const handleFoto = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setFoto(ev.target.result);
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target.result;
+      setFoto(dataUrl);
+      setFotoAnalisis(null);
+      setFotoAnalisisLoading(true);
+      const res = await analizarFotoAsado(dataUrl, pendingAsado?.cortes, idioma);
+      setFotoAnalisis(res);
+      setFotoAnalisisLoading(false);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -1929,9 +2071,24 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
         <textarea value={nota} onChange={e => setNota(e.target.value)} placeholder={t(idioma,"notas_ph")} rows={3} style={{ background:"#1a1005", border:"1px solid #3a2a1a", borderRadius:10, color:"#f0e6d3", fontSize:13, padding:"10px 14px", width:"100%", outline:"none", fontFamily:"'Inter',sans-serif", resize:"none", marginBottom:16 }} />
         <div style={{ color:"#ff8c42", fontSize:12, fontWeight:700, marginBottom:10 }}>{t(idioma,"foto_lbl")}</div>
         {foto ? (
-          <div style={{ position:"relative", marginBottom:16 }}>
-            <img src={foto} alt="asado" style={{ width:"100%", height:180, objectFit:"cover", borderRadius:14, border:"1px solid #3a2a1a" }} />
-            <button onClick={() => setFoto(null)} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,.75)", border:"none", borderRadius:"50%", width:28, height:28, color:"white", cursor:"pointer", fontSize:14 }}>✕</button>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ position:"relative" }}>
+              <img src={foto} alt="asado" style={{ width:"100%", height:180, objectFit:"cover", borderRadius:14, border:"1px solid #3a2a1a" }} />
+              <button onClick={() => { setFoto(null); setFotoAnalisis(null); }} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,.75)", border:"none", borderRadius:"50%", width:28, height:28, color:"white", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+              <div style={{ position:"absolute", top:8, left:8, background:"#4caf50", borderRadius:6, padding:"3px 8px", fontSize:10, fontWeight:700, color:"white" }}>✨ AI</div>
+            </div>
+            {fotoAnalisisLoading && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
+                {[0,1,2].map(i => <div key={i} style={{ width:5, height:5, borderRadius:"50%", background:"#4caf50", animation:`bounce ${0.5+i*0.15}s ease-in-out infinite alternate` }} />)}
+                <span style={{ color:"#4caf50", fontSize:11 }}>{idioma==="en" ? "Claude is analyzing the photo…" : "Claude está analizando la foto…"}</span>
+              </div>
+            )}
+            {fotoAnalisis && (
+              <div style={{ marginTop:10, background:"linear-gradient(135deg,#0d1a0d,#122012)", border:"1px solid #4caf5044", borderRadius:12, padding:"12px 14px", animation:"popIn .3s ease" }}>
+                <div style={{ color:"#4caf50", fontSize:10, fontWeight:700, marginBottom:6 }}>🧠 {idioma==="en" ? "Claude says:" : "Claude dice:"}</div>
+                <div style={{ color:"#c9b49a", fontSize:13, lineHeight:1.6 }}>{fotoAnalisis}</div>
+              </div>
+            )}
           </div>
         ) : (
           <button onClick={() => fileRef.current.click()} style={{ width:"100%", height:96, background:"#1a1005", border:"2px dashed #3a2a1a", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6, marginBottom:16 }}>
