@@ -412,7 +412,7 @@ input[type=range] { width:100%; accent-color:#ff8c42; }
 
 // ── LOCALSTORAGE ──────────────────────────────────────────────────
 // ── FIREBASE HELPERS ─────────────────────────────────────────────
-const DEFAULT_CONFIG = { idioma:'es', tiempoMult:100, vozSimulacion:false, notifSonido:true, voiceIndex:0, chistes:true };
+const DEFAULT_CONFIG = { idioma:'es', tiempoMult:100, vozSimulacion:false, notifSonido:true, voiceIndex:0, chistes:true, premium:false, completo:false };
 const PREMIUM_CUTS_IDS = ['lechon','pollo','cordero','tbone','picanha','morron','tomate','choclo'];
 
 async function fbGetProfile(uid) {
@@ -589,10 +589,10 @@ export default function App() {
     if (screen === "login")   return <LoginScreen go={go} idioma={idioma} />;
     if (screen === "onboard") return <Onboard store={store} persist={persist} go={go} idioma={idioma} />;
     if (screen === "home")    return <Home store={store} go={go} idioma={idioma} />;
-    if (screen === "preparaciones") return <Preparaciones go={go} idioma={idioma} />;
+    if (screen === "preparaciones") return <Preparaciones go={go} idioma={idioma} isPremium={store.config?.premium||store.config?.completo||false} />;
     if (screen === "fuego")   return <Fuego go={go} idioma={idioma} />;
     if (screen === "simulacion") return <Simulacion store={store} persist={persist} go={go} setPendingAsado={setPendingAsado} tiempoMult={(store.config?.tiempoMult||100)/100} idioma={idioma} aprendizaje={store.aprendizaje||{}} chistesOn={store.config?.chistes !== false} />;
-    if (screen === "rating")  return <RatingScreen store={store} persist={persist} go={go} pendingAsado={pendingAsado} setPendingAsado={setPendingAsado} saveAsado={saveAsado} idioma={idioma} aprendizaje={store.aprendizaje||{}} />;
+    if (screen === "rating")  return <RatingScreen store={store} persist={persist} go={go} pendingAsado={pendingAsado} setPendingAsado={setPendingAsado} saveAsado={saveAsado} idioma={idioma} aprendizaje={store.aprendizaje||{}} isCompleto={store.config?.completo||false} />;
     if (screen === "perfil")  return <Perfil store={store} persist={persist} go={go} idioma={idioma} aprendizaje={store.aprendizaje||{}} authUser={authUser} />;
     if (screen === "historial") return <Historial store={store} go={go} idioma={idioma} />;
     if (screen === "calculadora") return <Calculadora go={go} store={store} idioma={idioma} />;
@@ -842,7 +842,7 @@ function Home({ store, go, idioma='es' }) {
             <button onClick={() => go("historial")} style={{ background:"#1a1005", border:"1px solid #2a1a0a", borderRadius:10, padding:"6px 12px", color:"#ff8c42", fontSize:11, fontWeight:700, cursor:"pointer" }}>
               📋 {asados.length}
             </button>
-            {!store.config?.premium && (
+            {!store.config?.premium && !store.config?.completo && (
               <button onClick={() => go("premium")} style={{ background:"linear-gradient(135deg,#2d1f00,#1a1200)", border:"1px solid #ffd70055", borderRadius:10, padding:"6px 10px", color:"#ffd700", fontSize:11, fontWeight:700, cursor:"pointer" }}>⭐ VIP</button>
             )}
             <button onClick={() => go("ajustes")} style={{ background:"#1a1005", border:"1px solid #2a1a0a", borderRadius:10, padding:"6px 10px", color:"#8b7355", fontSize:14, cursor:"pointer" }}>⚙️</button>
@@ -912,7 +912,7 @@ function Hdr({ title, sub, onBack, badge }) {
 }
 
 // ── PREPARACIONES ─────────────────────────────────────────────────
-function Preparaciones({ go, idioma='es' }) {
+function Preparaciones({ go, idioma='es', isPremium=false }) {
   const [tab, setTab] = useState("vacuno");
   const [sel, setSel] = useState(null);
   const allCortes = { vacuno:CORTES_VACUNO, cerdo:CORTES_CERDO, achuras:ACHURAS };
@@ -929,17 +929,19 @@ function Preparaciones({ go, idioma='es' }) {
       <div style={{ flex:1, overflowY:"auto", padding:14 }}>
         {tab === "premium" ? (
           <div>
-            <div style={{ background:"linear-gradient(135deg,#2d1f00,#1a1200)", border:"1px solid #ff8c42", borderRadius:16, padding:18, marginBottom:14, textAlign:"center" }}>
-              <div style={{ fontSize:30, marginBottom:6 }}>⭐</div>
-              <div style={{ color:"#ff8c42", fontSize:17, fontWeight:700, marginBottom:8 }}>{t(idioma,"premium_title")}</div>
-              <div style={{ color:"#8b7355", fontSize:13, lineHeight:1.6, marginBottom:14 }}>{t(idioma,"premium_desc")}</div>
-              <button onClick={() => go("premium")} style={{ background:"linear-gradient(135deg,#ffd700,#ff8c42)", border:"none", borderRadius:12, padding:"11px 28px", color:"#1a0a00", fontWeight:900, fontSize:14, cursor:"pointer" }}>{t(idioma,"premium_btn")}</button>
-            </div>
+            {!isPremium && (
+              <div style={{ background:"linear-gradient(135deg,#2d1f00,#1a1200)", border:"1px solid #ff8c42", borderRadius:16, padding:18, marginBottom:14, textAlign:"center" }}>
+                <div style={{ fontSize:30, marginBottom:6 }}>⭐</div>
+                <div style={{ color:"#ff8c42", fontSize:17, fontWeight:700, marginBottom:8 }}>{t(idioma,"premium_title")}</div>
+                <div style={{ color:"#8b7355", fontSize:13, lineHeight:1.6, marginBottom:14 }}>{t(idioma,"premium_desc")}</div>
+                <button onClick={() => go("premium")} style={{ background:"linear-gradient(135deg,#ffd700,#ff8c42)", border:"none", borderRadius:12, padding:"11px 28px", color:"#1a0a00", fontWeight:900, fontSize:14, cursor:"pointer" }}>{t(idioma,"premium_btn")}</button>
+              </div>
+            )}
             {PREMIUM_CORTES.map(c => (
-              <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 15px", background:"#1a1005", borderRadius:12, marginBottom:8, border:"1px solid #2a1a0a", opacity:.55 }}>
+              <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 15px", background:"#1a1005", borderRadius:12, marginBottom:8, border:"1px solid #2a1a0a", opacity:isPremium?1:.55 }}>
                 <span style={{ fontSize:26 }}>{c.emoji}</span>
-                <span style={{ color:"#8b7355", fontSize:14 }}>{c.nombre}</span>
-                <span style={{ marginLeft:"auto", color:"#ff8c42" }}>🔒</span>
+                <span style={{ color:isPremium?"#f0e6d3":"#8b7355", fontSize:14 }}>{c.nombre}</span>
+                {!isPremium && <span style={{ marginLeft:"auto", color:"#ff8c42" }}>🔒</span>}
               </div>
             ))}
           </div>
@@ -1451,7 +1453,7 @@ function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, se
   );
 }
 
-function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParrilla, coccion, activeNotif, notifs, step, onDone, onReset, vozActiva, setVozActiva, idioma="es", aprendizaje={}, tiempoMultGlobal=1 }) {
+function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParrilla, coccion, activeNotif, notifs, step, onDone, onReset, vozActiva, setVozActiva, idioma="es", aprendizaje={}, tiempoMultGlobal=1, isCompleto=false }) {
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
       {/* Barra de voz */}
@@ -1538,7 +1540,7 @@ function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParril
           ))
         )}
       </div>
-      <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} />
+      <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} isCompleto={isCompleto} />
       {step === "done" && (
         <div style={{ padding:"8px 13px 24px", flexShrink:0 }}>
           <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
@@ -1753,12 +1755,12 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
         </div>
       )}
       {step === "modeSelect"    && <SimModeSelect idioma={idioma} setMode={setMode} setStep={setStep} aprendizaje={aprendizaje} tipoParrilla={tipoParrilla} />}
-      {step === "select"        && <SimSelectCortes idioma={idioma} selected={selected} toggleSel={toggleSel} coccion={coccion} setStep={setStep} aprendizaje={aprendizaje} tipoParrilla={tipoParrilla} isPremium={store.config?.premium||false} onGoPremium={() => { resetSim(); go("premium"); }} />}
+      {step === "select"        && <SimSelectCortes idioma={idioma} selected={selected} toggleSel={toggleSel} coccion={coccion} setStep={setStep} aprendizaje={aprendizaje} tipoParrilla={tipoParrilla} isPremium={store.config?.premium||store.config?.completo||false} onGoPremium={() => { resetSim(); go("premium"); }} />}
       {step === "config"        && <SimConfig idioma={idioma} coccion={coccion} setCoccion={setCoccion} tipoParrilla={tipoParrilla} setTipoParrilla={setTipoParrilla} setStep={setStep} />}
       {step === "fireCheck"     && <SimFireCheck idioma={idioma} tipoParrilla={tipoParrilla} setStep={setStep} />}
       {step === "placeCortes"   && <SimPlaceCortes idioma={idioma} selected={selected} coccion={coccion} tipoParrilla={tipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} />}
       {step === "fireCheckPro"  && <SimProFlow idioma={idioma} selected={selected} toggleSel={toggleSel} coccion={coccion} setCoccion={setCoccion} tipoParrilla={tipoParrilla} setTipoParrilla={setTipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} />}
-      {(step === "grilling" || step === "done") && <SimGrilling idioma={idioma} selected={selected} mins={mins} secs={secs} progress={progress} currentAltura={currentAltura} tipoParrilla={tipoParrilla} coccion={coccion} activeNotif={activeNotif} notifs={notifs} step={step} onDone={handleDone} onReset={resetSim} vozActiva={vozActiva} setVozActiva={setVozActiva} aprendizaje={aprendizaje} tiempoMultGlobal={tiempoMult} />}
+      {(step === "grilling" || step === "done") && <SimGrilling idioma={idioma} selected={selected} mins={mins} secs={secs} progress={progress} currentAltura={currentAltura} tipoParrilla={tipoParrilla} coccion={coccion} activeNotif={activeNotif} notifs={notifs} step={step} onDone={handleDone} onReset={resetSim} vozActiva={vozActiva} setVozActiva={setVozActiva} aprendizaje={aprendizaje} tiempoMultGlobal={tiempoMult} isCompleto={store.config?.completo||false} />}
     </div>
   );
 }
@@ -1817,7 +1819,7 @@ async function analizarFotoAsado(base64DataUrl, cortes, idioma) {
 }
 
 // ── CAMERA ANALYSIS ───────────────────────────────────────────────
-function CameraAnalysis({ cortes, idioma }) {
+function CameraAnalysis({ cortes, idioma, isCompleto=false }) {
   const [open, setOpen] = useState(false);
   const [foto, setFoto] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1842,6 +1844,17 @@ function CameraAnalysis({ cortes, idioma }) {
 
   const reset = () => { setFoto(null); setResultado(null); setError(false); };
   const close = () => { setOpen(false); reset(); };
+
+  if (!isCompleto) return (
+    <div style={{ margin:"8px 13px 0", padding:"11px 14px", background:"linear-gradient(135deg,#12091a,#1a0a2a)", border:"1px solid #9c27b033", borderRadius:12, display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+      <span style={{ fontSize:20, opacity:.5 }}>📷</span>
+      <div style={{ flex:1 }}>
+        <div style={{ color:"#7b3f9e", fontSize:12, fontWeight:700 }}>{idioma==="en" ? "AI Photo Analysis" : "Análisis de foto con IA"} <span style={{ fontSize:10 }}>🔒</span></div>
+        <div style={{ color:"#4a2d5a", fontSize:11, marginTop:2 }}>{idioma==="en" ? "Available in Plan Completo" : "Disponible en Plan Completo"}</div>
+      </div>
+      <span style={{ background:"#9c27b022", border:"1px solid #9c27b044", borderRadius:8, padding:"4px 9px", color:"#9c27b0", fontSize:10, fontWeight:700, whiteSpace:"nowrap" }}>✨ Completo</span>
+    </div>
+  );
 
   if (!open) return (
     <button onClick={() => setOpen(true)} style={{ margin:"8px 13px 0", width:"calc(100% - 26px)", padding:"10px 14px", background:"linear-gradient(135deg,#0d1a0d,#1a2a1a)", border:"1px solid #4caf5044", borderRadius:12, color:"#4caf50", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, flexShrink:0 }}>
@@ -1910,7 +1923,7 @@ function CameraAnalysis({ cortes, idioma }) {
   );
 }
 
-function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveAsado, idioma="es", aprendizaje={} }) {
+function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveAsado, idioma="es", aprendizaje={}, isCompleto=false }) {
   const [rating, setRating] = useState(null);
   const [nota, setNota] = useState("");
   const [foto, setFoto] = useState(null);
@@ -1964,10 +1977,12 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
       const dataUrl = ev.target.result;
       setFoto(dataUrl);
       setFotoAnalisis(null);
-      setFotoAnalisisLoading(true);
-      const res = await analizarFotoAsado(dataUrl, pendingAsado?.cortes, idioma);
-      setFotoAnalisis(res);
-      setFotoAnalisisLoading(false);
+      if (isCompleto) {
+        setFotoAnalisisLoading(true);
+        const res = await analizarFotoAsado(dataUrl, pendingAsado?.cortes, idioma);
+        setFotoAnalisis(res);
+        setFotoAnalisisLoading(false);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -2075,18 +2090,28 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
             <div style={{ position:"relative" }}>
               <img src={foto} alt="asado" style={{ width:"100%", height:180, objectFit:"cover", borderRadius:14, border:"1px solid #3a2a1a" }} />
               <button onClick={() => { setFoto(null); setFotoAnalisis(null); }} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,.75)", border:"none", borderRadius:"50%", width:28, height:28, color:"white", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-              <div style={{ position:"absolute", top:8, left:8, background:"#4caf50", borderRadius:6, padding:"3px 8px", fontSize:10, fontWeight:700, color:"white" }}>✨ AI</div>
+              {isCompleto && <div style={{ position:"absolute", top:8, left:8, background:"#7c3aed", borderRadius:6, padding:"3px 8px", fontSize:10, fontWeight:700, color:"white" }}>✨ AI</div>}
             </div>
-            {fotoAnalisisLoading && (
+            {isCompleto && fotoAnalisisLoading && (
               <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
-                {[0,1,2].map(i => <div key={i} style={{ width:5, height:5, borderRadius:"50%", background:"#4caf50", animation:`bounce ${0.5+i*0.15}s ease-in-out infinite alternate` }} />)}
-                <span style={{ color:"#4caf50", fontSize:11 }}>{idioma==="en" ? "Claude is analyzing the photo…" : "Claude está analizando la foto…"}</span>
+                {[0,1,2].map(i => <div key={i} style={{ width:5, height:5, borderRadius:"50%", background:"#7c3aed", animation:`bounce ${0.5+i*0.15}s ease-in-out infinite alternate` }} />)}
+                <span style={{ color:"#7c3aed", fontSize:11 }}>{idioma==="en" ? "Claude is analyzing the photo…" : "Claude está analizando la foto…"}</span>
               </div>
             )}
-            {fotoAnalisis && (
-              <div style={{ marginTop:10, background:"linear-gradient(135deg,#0d1a0d,#122012)", border:"1px solid #4caf5044", borderRadius:12, padding:"12px 14px", animation:"popIn .3s ease" }}>
-                <div style={{ color:"#4caf50", fontSize:10, fontWeight:700, marginBottom:6 }}>🧠 {idioma==="en" ? "Claude says:" : "Claude dice:"}</div>
+            {isCompleto && fotoAnalisis && (
+              <div style={{ marginTop:10, background:"linear-gradient(135deg,#1a0d2e,#120820)", border:"1px solid #7c3aed44", borderRadius:12, padding:"12px 14px", animation:"popIn .3s ease" }}>
+                <div style={{ color:"#a78bfa", fontSize:10, fontWeight:700, marginBottom:6 }}>🧠 {idioma==="en" ? "Claude says:" : "Claude dice:"}</div>
                 <div style={{ color:"#c9b49a", fontSize:13, lineHeight:1.6 }}>{fotoAnalisis}</div>
+              </div>
+            )}
+            {!isCompleto && (
+              <div style={{ marginTop:10, background:"linear-gradient(135deg,#1a0d2e,#120820)", border:"1px solid #7c3aed44", borderRadius:12, padding:"12px 14px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:16 }}>🔒</span>
+                  <div style={{ color:"#a78bfa", fontSize:11, fontWeight:700 }}>{idioma==="en"?"AI Photo Analysis · Plan Completo":"Análisis IA de Foto · Plan Completo"}</div>
+                </div>
+                <div style={{ color:"#6b5a8e", fontSize:11, lineHeight:1.5 }}>{idioma==="en"?"Unlock Plan Completo to get Claude's expert eye on your BBQ.":"Desbloqueá el Plan Completo para que Claude analice tu asado con IA."}</div>
+                <button onClick={() => go("premium")} style={{ marginTop:8, padding:"6px 14px", background:"linear-gradient(135deg,#7c3aed,#5b21b6)", border:"none", borderRadius:8, color:"white", fontSize:11, fontWeight:700, cursor:"pointer" }}>{idioma==="en"?"Unlock":"Desbloquear"} ✨</button>
               </div>
             )}
           </div>
@@ -2508,69 +2533,173 @@ function Ajustes({ store, persist, go }) {
 // ── PREMIUM SCREEN ────────────────────────────────────────────────
 function PremiumScreen({ store, persist, go, idioma="es" }) {
   const isPremium = store.config?.premium;
-  const features = [
-    ["🥩","Cortes VIP","Picanha, Lechón, Cordero, Pollo y más en la simulación"],
-    ["🧠","IA sin límites","Aprendizaje acelerado con análisis completo de cada asado"],
-    ["📊","Estadísticas avanzadas","Gráficos de progreso, racha de asados perfectos y más"],
-    ["🔊","Voz personalizada","Todas las voces disponibles para las notificaciones"],
-    ["😄","Chistes premium","Banco exclusivo de 50+ chistes del asador"],
-    ["☁️","Sync en la nube","Tu historial en todos tus dispositivos (próximamente)"],
-  ];
-  const activate = () => {
-    // Simulate purchase — in real app this calls payment API
+  const isCompleto = store.config?.completo;
+  const en = idioma === "en";
+
+  const activatePremium = () => {
     persist(prev => ({ ...prev, config:{ ...prev.config, premium:true } }));
   };
-  return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0d0a07" }}>
-      {/* Header */}
-      <div style={{ padding:"48px 22px 20px", background:"linear-gradient(180deg,#2d1200,#1a0800,#0d0a07)", flexShrink:0 }}>
-        <button onClick={() => go("home")} style={{ background:"none", border:"none", color:"#ff8c42", fontSize:24, cursor:"pointer", marginBottom:12, padding:0 }}>‹</button>
-        <div style={{ textAlign:"center" }}>
-          <div style={{ fontSize:48, marginBottom:8 }}>⭐</div>
-          <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:26, fontWeight:900 }}>Parrilla Maestro</div>
-          <div style={{ fontFamily:"'Playfair Display',serif", color:"#ffd700", fontSize:20, fontWeight:700 }}>Premium</div>
-          <div style={{ color:"#8b7355", fontSize:13, marginTop:6 }}>{idioma==="en"?"Everything unlocked. No limits.":"Todo desbloqueado. Sin límites."}</div>
+  const activateCompleto = () => {
+    persist(prev => ({ ...prev, config:{ ...prev.config, premium:true, completo:true } }));
+  };
+
+  const premiumFeatures = [
+    ["🥩", en?"VIP Cuts":"Cortes VIP", en?"Picanha, Lechón, Cordero, T-Bone and more in simulation":"Picanha, Lechón, Cordero, T-Bone y más en la simulación"],
+    ["🧠", en?"AI Learning":"IA Aprendizaje", en?"Personalized time adjustments from your BBQ history":"Ajustes de tiempo personalizados según tu historial"],
+    ["😄", en?"BBQ Jokes":"Chistes asadores", en?"50+ exclusive jokes during the simulation":"50+ chistes exclusivos durante la simulación"],
+    ["☁️", en?"Cloud Sync":"Sync en la nube", en?"Your history on all devices (coming soon)":"Tu historial en todos tus dispositivos (próximamente)"],
+  ];
+  const completoFeatures = [
+    ["✨", en?"Claude AI Photo Analysis":"Análisis de Foto con Claude IA", en?"Get expert AI feedback on your BBQ photos":"Análisis experto de IA sobre las fotos de tu asado"],
+    ["🔮", en?"Everything in Premium":"Todo lo de Premium", en?"All Premium features included":"Todas las funciones Premium incluidas"],
+  ];
+
+  if (isCompleto) {
+    return (
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0d0a07" }}>
+        <div style={{ padding:"48px 22px 20px", background:"linear-gradient(180deg,#1a0030,#0d0a07)", flexShrink:0 }}>
+          <button onClick={() => go("home")} style={{ background:"none", border:"none", color:"#a78bfa", fontSize:24, cursor:"pointer", marginBottom:12, padding:0 }}>‹</button>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:52, marginBottom:8 }}>💎</div>
+            <div style={{ fontFamily:"'Playfair Display',serif", color:"#a78bfa", fontSize:26, fontWeight:900 }}>Plan Completo</div>
+            <div style={{ color:"#6b5a8e", fontSize:13, marginTop:6 }}>{en?"All features unlocked. The full experience.":"Todo desbloqueado. La experiencia completa."}</div>
+          </div>
+        </div>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
+          <div style={{ fontSize:60, marginBottom:16 }}>🏆</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", color:"#a78bfa", fontSize:22, fontWeight:900, marginBottom:8, textAlign:"center" }}>
+            {en?"You have Plan Completo!":"¡Tenés el Plan Completo!"}
+          </div>
+          <div style={{ color:"#6b5a8e", fontSize:14, lineHeight:1.7, textAlign:"center" }}>
+            {en?"All features including AI photo analysis are unlocked.":"Todas las funciones incluido el análisis de foto con IA están activas."}
+          </div>
         </div>
       </div>
-      <div style={{ flex:1, overflowY:"auto", padding:"0 18px 32px" }}>
-        {isPremium ? (
-          <div style={{ textAlign:"center", padding:"40px 20px" }}>
-            <div style={{ fontSize:60, marginBottom:16 }}>🏆</div>
-            <div style={{ fontFamily:"'Playfair Display',serif", color:"#ffd700", fontSize:22, fontWeight:900, marginBottom:8 }}>
-              {idioma==="en"?"You're Premium!":"¡Sos Premium!"}
+    );
+  }
+
+  if (isPremium) {
+    return (
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0d0a07" }}>
+        <div style={{ padding:"48px 22px 20px", background:"linear-gradient(180deg,#2d1200,#1a0800,#0d0a07)", flexShrink:0 }}>
+          <button onClick={() => go("home")} style={{ background:"none", border:"none", color:"#ff8c42", fontSize:24, cursor:"pointer", marginBottom:12, padding:0 }}>‹</button>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:48, marginBottom:8 }}>⭐</div>
+            <div style={{ fontFamily:"'Playfair Display',serif", color:"#ffd700", fontSize:22, fontWeight:900 }}>{en?"You're Premium!":"¡Sos Premium!"}</div>
+            <div style={{ color:"#8b7355", fontSize:13, marginTop:6 }}>{en?"Upgrade to Completo to unlock AI photo analysis.":"Actualizá al Plan Completo para desbloquear el análisis de foto con IA."}</div>
+          </div>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 18px 32px" }}>
+          {/* Completo upsell */}
+          <div style={{ background:"linear-gradient(135deg,#1a0d2e,#0d0720)", border:"2px solid #7c3aed66", borderRadius:20, padding:20, marginBottom:16 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+              <span style={{ fontSize:28 }}>💎</span>
+              <div>
+                <div style={{ fontFamily:"'Playfair Display',serif", color:"#a78bfa", fontSize:18, fontWeight:900 }}>Plan Completo</div>
+                <div style={{ color:"#6b5a8e", fontSize:11 }}>{en?"The ultimate upgrade":"La mejora definitiva"}</div>
+              </div>
             </div>
-            <div style={{ color:"#8b7355", fontSize:14, lineHeight:1.7 }}>
-              {idioma==="en"?"All features unlocked. Enjoy the full experience.":"Todas las funciones desbloqueadas. Disfrutá la experiencia completa."}
+            {completoFeatures.map(([em, title, desc]) => (
+              <div key={title} style={{ display:"flex", gap:12, marginBottom:12 }}>
+                <div style={{ width:36, height:36, background:"#7c3aed22", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{em}</div>
+                <div>
+                  <div style={{ color:"#e9d5ff", fontSize:13, fontWeight:700 }}>{title}</div>
+                  <div style={{ color:"#6b5a8e", fontSize:11, marginTop:2, lineHeight:1.5 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+            <div style={{ textAlign:"center", marginTop:8, marginBottom:4 }}>
+              <div style={{ color:"#6b5a8e", fontSize:11, textDecoration:"line-through", marginBottom:2 }}>$4.99/{en?"mo":"mes"}</div>
+              <div style={{ color:"#a78bfa", fontSize:32, fontWeight:900, lineHeight:1 }}>$2.00</div>
+              <div style={{ color:"#6b5a8e", fontSize:11, marginTop:3 }}>{en?"/ month extra · you already pay $2.99":"/ mes adicional · ya pagás $2.99 de Premium"}</div>
+            </div>
+            <button onClick={activateCompleto} style={{ width:"100%", marginTop:12, padding:14, background:"linear-gradient(135deg,#7c3aed,#5b21b6)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:900, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
+              💎 {en?"Upgrade to Completo":"Actualizar a Completo"}
+            </button>
+          </div>
+          <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
+            {en?"Demo mode: tap to simulate purchase.":"Modo demo: tocá para simular la compra."}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0d0a07" }}>
+      <div style={{ padding:"48px 22px 16px", background:"linear-gradient(180deg,#2d1200,#1a0800,#0d0a07)", flexShrink:0 }}>
+        <button onClick={() => go("home")} style={{ background:"none", border:"none", color:"#ff8c42", fontSize:24, cursor:"pointer", marginBottom:10, padding:0 }}>‹</button>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:40, marginBottom:6 }}>🔓</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:22, fontWeight:900 }}>{en?"Choose your plan":"Elegí tu plan"}</div>
+          <div style={{ color:"#8b7355", fontSize:12, marginTop:4 }}>{en?"Unlock the full BBQ experience":"Desbloqueá la experiencia asadora completa"}</div>
+        </div>
+      </div>
+      <div style={{ flex:1, overflowY:"auto", padding:"16px 18px 32px" }}>
+        {/* Premium plan */}
+        <div style={{ background:"linear-gradient(135deg,#2d1f00,#1a1200)", border:"2px solid #ff8c4244", borderRadius:20, padding:18, marginBottom:14 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:26 }}>⭐</span>
+              <div>
+                <div style={{ fontFamily:"'Playfair Display',serif", color:"#ffd700", fontSize:17, fontWeight:900 }}>Premium</div>
+                <div style={{ color:"#8b7355", fontSize:10 }}>{en?"For the serious pitmaster":"Para el asador en serio"}</div>
+              </div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ color:"#ffd700", fontSize:22, fontWeight:900, lineHeight:1 }}>$2.99</div>
+              <div style={{ color:"#6b5a3e", fontSize:10 }}>{en?"/ mo":"/ mes"}</div>
             </div>
           </div>
-        ) : (
-          <>
-            {/* Features list */}
-            <div style={{ marginBottom:20 }}>
-              {features.map(([em, title, desc]) => (
-                <div key={title} style={{ display:"flex", gap:14, padding:"12px 0", borderBottom:"1px solid #1a1a0a" }}>
-                  <div style={{ width:40, height:40, background:"#ff8c4222", borderRadius:11, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{em}</div>
-                  <div>
-                    <div style={{ color:"#f0e6d3", fontSize:13, fontWeight:700 }}>{title}</div>
-                    <div style={{ color:"#6b5a3e", fontSize:11, marginTop:2, lineHeight:1.5 }}>{desc}</div>
-                  </div>
-                </div>
-              ))}
+          {premiumFeatures.map(([em, title, desc]) => (
+            <div key={title} style={{ display:"flex", gap:10, marginBottom:10 }}>
+              <div style={{ width:32, height:32, background:"#ff8c4222", borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>{em}</div>
+              <div>
+                <div style={{ color:"#f0e6d3", fontSize:12, fontWeight:700 }}>{title}</div>
+                <div style={{ color:"#6b5a3e", fontSize:10, marginTop:1, lineHeight:1.5 }}>{desc}</div>
+              </div>
             </div>
-            {/* Pricing */}
-            <div style={{ background:"linear-gradient(135deg,#2d1f00,#1a1200)", borderRadius:20, padding:20, border:"1px solid #ff8c4244", marginBottom:14, textAlign:"center" }}>
-              <div style={{ color:"#8b7355", fontSize:12, marginBottom:4 }}>{idioma==="en"?"One simple price":"Un precio simple"}</div>
-              <div style={{ color:"#ffd700", fontSize:40, fontWeight:900, lineHeight:1 }}>$2.99</div>
-              <div style={{ color:"#8b7355", fontSize:12, marginTop:4 }}>{idioma==="en"?"/ month · cancel anytime":"/ mes · cancelá cuando quieras"}</div>
+          ))}
+          <button onClick={activatePremium} style={{ width:"100%", marginTop:6, padding:13, background:"linear-gradient(135deg,#ffd700,#ff8c42)", border:"none", borderRadius:12, color:"#1a0a00", fontSize:14, fontWeight:900, cursor:"pointer" }}>
+            ⭐ {en?"Unlock Premium":"Desbloquear Premium"}
+          </button>
+        </div>
+
+        {/* Completo plan */}
+        <div style={{ background:"linear-gradient(135deg,#1a0d2e,#0d0720)", border:"2px solid #7c3aed88", borderRadius:20, padding:18, marginBottom:14, position:"relative" }}>
+          <div style={{ position:"absolute", top:-10, right:16, background:"linear-gradient(135deg,#7c3aed,#5b21b6)", borderRadius:8, padding:"3px 10px", fontSize:10, fontWeight:700, color:"white" }}>
+            {en?"BEST VALUE":"MEJOR VALOR"}
+          </div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:26 }}>💎</span>
+              <div>
+                <div style={{ fontFamily:"'Playfair Display',serif", color:"#a78bfa", fontSize:17, fontWeight:900 }}>Completo</div>
+                <div style={{ color:"#6b5a8e", fontSize:10 }}>{en?"Everything + AI":"Todo + IA"}</div>
+              </div>
             </div>
-            <button onClick={activate} style={{ width:"100%", padding:16, background:"linear-gradient(135deg,#ffd700,#ff8c42)", border:"none", borderRadius:16, color:"#1a0a00", fontSize:16, fontWeight:900, cursor:"pointer", marginBottom:10, animation:"pulseBtn 2s ease-in-out infinite" }}>
-              ⭐ {idioma==="en"?"Unlock Premium":"Desbloquear Premium"}
-            </button>
-            <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
-              {idioma==="en"?"Demo mode: tap to simulate purchase. Real payments coming soon.":"Modo demo: tocá para simular la compra. Pagos reales próximamente."}
+            <div style={{ textAlign:"right" }}>
+              <div style={{ color:"#a78bfa", fontSize:22, fontWeight:900, lineHeight:1 }}>$4.99</div>
+              <div style={{ color:"#6b5a8e", fontSize:10 }}>{en?"/ mo":"/ mes"}</div>
             </div>
-          </>
-        )}
+          </div>
+          {[...premiumFeatures, ...completoFeatures].map(([em, title, desc]) => (
+            <div key={title} style={{ display:"flex", gap:10, marginBottom:10 }}>
+              <div style={{ width:32, height:32, background:"#7c3aed22", borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>{em}</div>
+              <div>
+                <div style={{ color:"#e9d5ff", fontSize:12, fontWeight:700 }}>{title}</div>
+                <div style={{ color:"#6b5a8e", fontSize:10, marginTop:1, lineHeight:1.5 }}>{desc}</div>
+              </div>
+            </div>
+          ))}
+          <button onClick={activateCompleto} style={{ width:"100%", marginTop:6, padding:13, background:"linear-gradient(135deg,#7c3aed,#5b21b6)", border:"none", borderRadius:12, color:"white", fontSize:14, fontWeight:900, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
+            💎 {en?"Unlock Completo":"Desbloquear Completo"}
+          </button>
+        </div>
+
+        <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
+          {en?"Demo mode: tap to simulate purchase. Real payments coming soon.":"Modo demo: tocá para simular la compra. Pagos reales próximamente."}
+        </div>
       </div>
     </div>
   );
