@@ -49,7 +49,9 @@ const xpForLevel = lvl => lvl * 200;
 const totalXP = asados => asados.reduce((a, x) => a + (x.rating==="perfecto" ? 50 : 30) + x.cortes.length * 10, 0);
 function levelFromXP(xp) { let l = 1; while (xp >= xpForLevel(l)) { xp -= xpForLevel(l); l++; } return l; }
 function xpInLevel(xp) { let l = 1; while (xp >= xpForLevel(l)) { xp -= xpForLevel(l); l++; } return xp; }
-const TITLE = lvl => ["Encendedor","Fogonero","Parrillero","Maestro","Gran Maestro","Leyenda de la Parrilla"][Math.min(lvl-1,5)];
+const TITLES_ES = ["Encendedor","Fogonero","Parrillero","Maestro","Gran Maestro","Leyenda de la Parrilla"];
+const TITLES_EN = ["Fire Starter","Stoker","Grillman","Grill Master","Grand Master","BBQ Legend"];
+const TITLE = (lvl, idioma='es') => (idioma==='en' ? TITLES_EN : TITLES_ES)[Math.min(lvl-1,5)];
 function favCorte(asados) {
   const f = {};
   asados.forEach(a => a.cortes.forEach(c => { f[c] = (f[c] || 0) + 1; }));
@@ -711,7 +713,7 @@ function Home({ store, go, idioma='es' }) {
             </button>
             <div>
               <div style={{ color:"#f0e6d3", fontSize:14, fontWeight:700 }}>{t(idioma,"hola")}, {user?.nombre || "Parrillero"} 👋</div>
-              <div style={{ color:"#8b7355", fontSize:11 }}>Nv.{lvl} · {TITLE(lvl)}</div>
+              <div style={{ color:"#8b7355", fontSize:11 }}>Nv.{lvl} · {TITLE(lvl, idioma)}</div>
             </div>
           </div>
           <div style={{ display:"flex", gap:8 }}>
@@ -771,6 +773,20 @@ function Home({ store, go, idioma='es' }) {
   );
 }
 
+// ── CORTE THUMBNAIL (emoji fallback when no photo or image fails) ──
+function CorteImg({ thumb, corte }) {
+  const [failed, setFailed] = useState(false);
+  if (!thumb || failed) {
+    return <div style={{ width:"100%", height:"100%", background:`${corte.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24 }}>{corte.emoji}</div>;
+  }
+  return (
+    <>
+      <img src={thumb} alt={corte.nombre} onError={() => setFailed(true)} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter:"saturate(1.3) contrast(1.1) brightness(0.8)" }} />
+      <div style={{ position:"absolute", inset:0, background:`linear-gradient(135deg,${corte.color}44 0%,transparent 60%)` }} />
+    </>
+  );
+}
+
 // ── HEADER ────────────────────────────────────────────────────────
 function Hdr({ title, sub, onBack, badge }) {
   return (
@@ -818,14 +834,7 @@ function Preparaciones({ go, idioma='es', isPremium=false }) {
               if (isPremium) return (
                 <button key={c.id} onClick={() => setSel(c)} style={{ width:"100%", display:"flex", alignItems:"center", gap:13, padding:"11px 13px", background:"#1a1005", borderRadius:14, marginBottom:9, border:`1px solid ${c.color}44`, cursor:"pointer", textAlign:"left", animation:`slideUp .3s ease ${i*.05}s both` }}>
                   <div style={{ width:56, height:56, borderRadius:12, flexShrink:0, overflow:"hidden", position:"relative", border:`1px solid ${c.color}55` }}>
-                    {thumb ? (
-                      <>
-                        <img src={thumb} alt={c.nombre} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter:"saturate(1.3) contrast(1.1) brightness(0.8)" }} />
-                        <div style={{ position:"absolute", inset:0, background:`linear-gradient(135deg,${c.color}44 0%,transparent 60%)` }} />
-                      </>
-                    ) : (
-                      <div style={{ width:"100%", height:"100%", background:`${c.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24 }}>{c.emoji}</div>
-                    )}
+                    <CorteImg thumb={thumb} corte={c} />
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ color:"#f0e6d3", fontSize:14, fontWeight:700 }}>{c.nombre}</div>
@@ -849,21 +858,13 @@ function Preparaciones({ go, idioma='es', isPremium=false }) {
             const thumb = CORTE_IMAGES[c.id];
             return (
               <button key={c.id} onClick={() => setSel(c)} style={{ width:"100%", display:"flex", alignItems:"center", gap:13, padding:"11px 13px", background:"#1a1005", borderRadius:14, marginBottom:9, border:`1px solid ${c.color}33`, cursor:"pointer", textAlign:"left", animation:`slideUp .3s ease ${i*.05}s both`, overflow:"hidden" }}>
-                {/* Thumbnail with color-grade filter */}
                 <div style={{ width:56, height:56, borderRadius:12, flexShrink:0, overflow:"hidden", position:"relative", border:`1px solid ${c.color}55` }}>
-                  {thumb ? (
-                    <>
-                      <img src={thumb} alt={c.nombre} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter:"saturate(1.3) contrast(1.1) brightness(0.8)" }} />
-                      <div style={{ position:"absolute", inset:0, background:`linear-gradient(135deg,${c.color}44 0%,transparent 60%)` }} />
-                    </>
-                  ) : (
-                    <div style={{ width:"100%", height:"100%", background:`${c.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24 }}>{c.emoji}</div>
-                  )}
+                  <CorteImg thumb={thumb} corte={c} />
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ color:"#f0e6d3", fontSize:14, fontWeight:700 }}>{c.nombre}</div>
                   <div style={{ color:"#8b7355", fontSize:11, marginTop:2 }}>⏱ {c.tiempo}</div>
-                  <div style={{ color:"#5a4a32", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.descripcion}</div>
+                  <div style={{ color:"#5a4a32", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{td(c,'descripcion',idioma)}</div>
                 </div>
                 <div style={{ color:c.color, fontSize:18, flexShrink:0 }}>›</div>
               </button>
@@ -1085,7 +1086,7 @@ function Calculadora({ go, store, idioma="es" }) {
         <div style={{ background:"linear-gradient(135deg,#1a1200,#2a1800)", borderRadius:14, padding:"13px 15px", border:"1px solid #ff8c4222" }}>
           <div style={{ color:"#ff8c42", fontSize:11, fontWeight:700, marginBottom:6 }}>{t(idioma,"consejo_carbon")}</div>
           <div style={{ color:"#8b7355", fontSize:12, lineHeight:1.65 }}>
-            Comprá siempre un 10–15% extra por las dudas. Para {comensales} persona{comensales !== 1 ? "s" : ""}, llevá <span style={{ color:"#ff8c42", fontWeight:700 }}>{Math.ceil(+carbonKg * 1.15 * 10) / 10} kg</span> si querés tener margen.
+            {t(idioma,"consejo_txt1")} {comensales} {comensales !== 1 ? t(idioma,"personas") : t(idioma,"persona")}, {t(idioma,"consejo_txt2")} <span style={{ color:"#ff8c42", fontWeight:700 }}>{Math.ceil(+carbonKg * 1.15 * 10) / 10} kg</span> {t(idioma,"consejo_txt3")}
           </div>
         </div>
 
@@ -1212,15 +1213,19 @@ function SimConfig({ coccion, setCoccion, tipoParrilla, setTipoParrilla, setStep
       <StepBar step={2} total={4} label={t(idioma,"config_coccion")} idioma={idioma} />
       <Card title={t(idioma,"punto_coccion")}>
         <div style={{ display:"flex", gap:8 }}>
-          {Object.entries(COCCION_LABELS).map(([k, lbl]) => (
+          {Object.entries(COCCION_LABELS).map(([k]) => (
             <button key={k} onClick={() => setCoccion(k)} style={{ flex:1, padding:"10px 4px", background:coccion===k?`${COCCION_COLORS[k]}33`:"#0d0a07", border:`2px solid ${coccion===k?COCCION_COLORS[k]:"#2a1a0a"}`, borderRadius:10, cursor:"pointer", color:coccion===k?COCCION_COLORS[k]:"#555", fontSize:10, fontWeight:700, textAlign:"center", transition:"all .2s" }}>
               <div style={{ fontSize:18, marginBottom:3 }}>{k==="crudo"?"🔴":k==="punto"?"🟠":"🟤"}</div>
-              {lbl}
+              {getCoccionLabel(k, idioma)}
             </button>
           ))}
         </div>
         <div style={{ color:"#555", fontSize:11, marginTop:8, textAlign:"center" }}>
-          {coccion==="crudo" ? "Tiempos +25% — Centro rosado" : coccion==="punto" ? "Tiempos estándar — El clásico" : "Tiempos −22% — Bien cocido"}
+          {coccion==="crudo"
+            ? (idioma==="en" ? "Times −22% — Pink center" : "Tiempos −22% — Centro rosado")
+            : coccion==="punto"
+            ? (idioma==="en" ? "Standard times — The classic" : "Tiempos estándar — El clásico")
+            : (idioma==="en" ? "Times +25% — Well done" : "Tiempos +25% — Bien cocido")}
         </div>
       </Card>
       <Card title={t(idioma,"tipo_parrilla")}>
@@ -1240,7 +1245,7 @@ function SimConfig({ coccion, setCoccion, tipoParrilla, setTipoParrilla, setStep
 }
 
 function SimFireCheck({ tipoParrilla, setStep , idioma="es" }) {
-  const tips = ["✅ Sal gruesa sobre los cortes", "✅ Carne a temperatura ambiente (30 min fuera del frío)", "✅ Parrilla limpia y seca", tipoParrilla==="adjustable" ? "✅ Grilla en posición ALTA (25 cm del fuego)" : "✅ Parrilla fija posicionada (15 cm del fuego)"];
+  const tips = [t(idioma,"tip_sal"), t(idioma,"tip_temp"), t(idioma,"tip_limpia"), tipoParrilla==="adjustable" ? t(idioma,"tip_alta") : t(idioma,"tip_fija")];
   return (
     <div style={{ flex:1, overflowY:"auto", padding:14 }}>
       <StepBar step={3} total={4} label={t(idioma,"fuego_listo")} idioma={idioma} />
@@ -1266,7 +1271,7 @@ function SimPlaceCortes({ selected, coccion, tipoParrilla, startGrilling, idioma
       <StepBar step={4} total={4} label={t(idioma,"colocar")} idioma={idioma} />
       <div style={{ background:"linear-gradient(180deg,#1a0a00,#2d1200)", borderRadius:18, padding:18, marginBottom:14, border:"1px solid #3d1a00", textAlign:"center" }}>
         <div style={{ color:"#4fc3f7", fontSize:13, fontWeight:700, marginBottom:10 }}>
-          📏 Altura inicial: {tipoParrilla==="adjustable" ? "25 cm del fuego" : "15 cm (fija)"}
+          📏 {idioma==="en" ? "Initial height:" : "Altura inicial:"} {tipoParrilla==="adjustable" ? (idioma==="en" ? "25 cm from fire" : "25 cm del fuego") : (idioma==="en" ? "15 cm (fixed)" : "15 cm (fija)")}
         </div>
         <AlturaVis cm={tipoParrilla==="adjustable" ? 25 : 15} />
         <div style={{ fontSize:24, marginTop:10 }}>{selected.map(c => c.emoji).join(" ")}</div>
@@ -1320,7 +1325,7 @@ function SimPlaceCortes({ selected, coccion, tipoParrilla, startGrilling, idioma
 function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, setTipoParrilla, startGrilling, idioma="es", aprendizaje={} }) {
   return (
     <div style={{ flex:1, overflowY:"auto", padding:14 }}>
-      <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:10 }}>⚡ Cortes</div>
+      <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:10 }}>⚡ {idioma==="en" ? "Cuts" : "Cortes"}</div>
       {[
         { label:"🐄", ids:["asado-tira","vacio","entraña","lomo","cuadril","matambre","bife-chorizo","ojo-bife","tapa-asado","colita-cuadril"] },
         { label:"🐷", ids:["bondiola","costillas-cerdo","lomo-cerdo","matambre-cerdo","pechito-cerdo"] },
@@ -1345,27 +1350,30 @@ function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, se
           </div>
         );
       })}
-      <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:8 }}>🥩 Punto</div>
+      <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:8 }}>🥩 {t(idioma,"punto_coccion")}</div>
       <div style={{ display:"flex", gap:7, marginBottom:14 }}>
-        {Object.entries(COCCION_LABELS).map(([k, lbl]) => (
+        {Object.entries(COCCION_LABELS).map(([k]) => (
           <button key={k} onClick={() => setCoccion(k)} style={{ flex:1, padding:"8px 4px", background:coccion===k?`${COCCION_COLORS[k]}33`:"#1a1005", border:`2px solid ${coccion===k?COCCION_COLORS[k]:"#2a1a0a"}`, borderRadius:10, cursor:"pointer", color:coccion===k?COCCION_COLORS[k]:"#555", fontSize:10, fontWeight:700 }}>
-            {k==="crudo" ? "🔴" : k==="punto" ? "🟠" : "🟤"} {lbl}
+            {k==="crudo" ? "🔴" : k==="punto" ? "🟠" : "🟤"} {getCoccionLabel(k, idioma)}
           </button>
         ))}
       </div>
-      <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:8 }}>📏 Parrilla</div>
+      <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:8 }}>📏 {t(idioma,"tipo_parrilla")}</div>
       <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-        {[{id:"adjustable",label:"⬆️⬇️ Graduable"},{id:"fixed",label:"🔒 Fija"}].map(opt => (
+        {[{id:"adjustable",label:`⬆️⬇️ ${t(idioma,"graduable")}`},{id:"fixed",label:`🔒 ${t(idioma,"fija")}`}].map(opt => (
           <button key={opt.id} onClick={() => setTipoParrilla(opt.id)} style={{ flex:1, padding:10, background:tipoParrilla===opt.id?"#ff8c4222":"#1a1005", border:`2px solid ${tipoParrilla===opt.id?"#ff8c42":"#2a1a0a"}`, borderRadius:10, cursor:"pointer", color:tipoParrilla===opt.id?"#ff8c42":"#555", fontSize:11, fontWeight:700 }}>
             {opt.label}
           </button>
         ))}
       </div>
       <div style={{ background:"#1a1005", borderRadius:12, padding:13, border:"1px solid #2a1a0a", marginBottom:14 }}>
-        <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:5 }}>🔥 ¿El fuego está listo y la carne en la parrilla?</div>
-        <div style={{ color:"#6b5a3e", fontSize:12 }}>Brasas blancas, sin llama, cortes apoyados.</div>
+        <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:5 }}>🔥 {idioma==="en" ? "Is the fire ready and meat on the grill?" : "¿El fuego está listo y la carne en la parrilla?"}</div>
+        <div style={{ color:"#6b5a3e", fontSize:12 }}>{idioma==="en" ? "White coals, no flames, cuts placed." : "Brasas blancas, sin llama, cortes apoyados."}</div>
       </div>
-      <SimBtn label={`⚡ Iniciar${selected.length > 0 ? ` (${selected.length} corte${selected.length > 1 ? "s" : ""})` : " (todos los cortes)"}`} onClick={startGrilling} />
+      <SimBtn label={idioma==="en"
+        ? `⚡ Start${selected.length > 0 ? ` (${selected.length} cut${selected.length > 1 ? "s" : ""})` : " (all cuts)"}`
+        : `⚡ Iniciar${selected.length > 0 ? ` (${selected.length} corte${selected.length > 1 ? "s" : ""})` : " (todos los cortes)"}`}
+        onClick={startGrilling} />
     </div>
   );
 }
@@ -1520,6 +1528,8 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
   const intervalRef = useRef(null);
   const firedKeysRef = useRef(new Set());
   const eventListRef = useRef([]);
+  const startTimeRef = useRef(null);
+  const lastMinRef = useRef(-1);
 
   // Sync refs so interval closure always reads latest values without stale closures
   useEffect(() => { vozActivaRef.current = vozActiva; }, [vozActiva]);
@@ -1572,6 +1582,8 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
     setEventList(allEvents);
     eventListRef.current = allEvents;
     firedKeysRef.current = new Set();
+    startTimeRef.current = Date.now();
+    lastMinRef.current = -1;
     setTimer(0); setNotifs([]); setFiredKeys(new Set()); setActiveNotif(null);
     setStep("grilling");
   };
@@ -1580,6 +1592,8 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
     clearInterval(intervalRef.current);
     firedKeysRef.current = new Set();
     eventListRef.current = [];
+    startTimeRef.current = null;
+    lastMinRef.current = -1;
     setStep("modeSelect"); setMode(null); setSelected([]); setCoccion("punto"); setTipoParrilla("adjustable");
     setTimer(0); setNotifs([]); setFiredKeys(new Set()); setActiveNotif(null); setEventList([]);
   };
@@ -1607,37 +1621,67 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
 
   useEffect(() => {
     if (step !== "grilling") return;
-    intervalRef.current = setInterval(() => {
-      setTimer(t => {
-        const newT = t + 1;
-        const newMin = Math.floor(newT / 60);
-        if (newT % 60 === 0) {
-          const toFire = eventListRef.current.filter(ev => ev.min === newMin && !firedKeysRef.current.has(ev.key));
-          toFire.forEach(ev => {
-            firedKeysRef.current.add(ev.key);
-            const n = { ...ev, time:newMin, id:`${ev.key}-t${newT}` };
-            setNotifs(ns => [n, ...ns.slice(0, 14)]);
-            setActiveNotif(n);
-            speak(`${ev.label}. ${ev.msg}`, idioma);
-            setTimeout(() => setActiveNotif(null), 5000);
-          });
+
+    // Anchor timer to wall clock so background throttling doesn't slow it down.
+    // Each "tick" unit = 100 ms of real time (simulation runs at ×10 speed).
+    const processTick = () => {
+      if (!startTimeRef.current) return;
+      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 100);
+      const currentMin = Math.floor(elapsed / 60);
+
+      setTimer(elapsed);
+
+      // Fire ALL notifications for every minute that passed since last check.
+      // This catches up correctly after the tab was backgrounded.
+      const fromMin = lastMinRef.current + 1;
+      if (currentMin >= fromMin) {
+        const missed = [];
+        for (let m = fromMin; m <= currentMin; m++) {
+          eventListRef.current
+            .filter(ev => ev.min === m && !firedKeysRef.current.has(ev.key))
+            .forEach(ev => {
+              firedKeysRef.current.add(ev.key);
+              const n = { ...ev, time: m, id: `${ev.key}-m${m}` };
+              missed.push(n);
+            });
         }
-        if (newMin >= maxTime && maxTime > 0) { clearInterval(intervalRef.current); setStep("done"); }
-        return newT;
-      });
-    }, 100);
-    return () => clearInterval(intervalRef.current);
+        if (missed.length > 0) {
+          setNotifs(ns => [...missed.slice().reverse(), ...ns].slice(0, 15));
+          const latest = missed[missed.length - 1];
+          setActiveNotif(latest);
+          speak(`${latest.label}. ${latest.msg}`, idioma);
+          setTimeout(() => setActiveNotif(null), 5000);
+        }
+        lastMinRef.current = currentMin;
+      }
+
+      if (currentMin >= maxTime && maxTime > 0) {
+        clearInterval(intervalRef.current);
+        setStep("done");
+      }
+    };
+
+    intervalRef.current = setInterval(processTick, 500);
+
+    // Catch up immediately when the user switches back to the tab/app.
+    const onVisible = () => { if (document.visibilityState === "visible") processTick(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(intervalRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [step, maxTime]);
 
   const badge = mode ? (
     <div style={{ background:mode==="pro"?"#ff8c4222":"#4caf5022", border:`1px solid ${mode==="pro"?"#ff8c42":"#4caf50"}`, borderRadius:20, padding:"3px 12px", color:mode==="pro"?"#ff8c42":"#4caf50", fontSize:11, fontWeight:700 }}>
-      {mode === "pro" ? "⚡ PRO" : "📖 PRINCIPIANTE"}
+      {mode === "pro" ? "⚡ PRO" : (idioma==="en" ? "📖 BEGINNER" : "📖 PRINCIPIANTE")}
     </div>
   ) : null;
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" }}>
-      <Hdr title="Simulación" sub="ASADO INTERACTIVO" onBack={() => {
+      <Hdr title={t(idioma,"simulacion")} sub={t(idioma,"sim_sub")} onBack={() => {
         if (step === "grilling" || step === "done") {
           setShowExitModal(true);
         } else if (step === "modeSelect") {
@@ -2162,7 +2206,9 @@ function Perfil({ store, persist, go, idioma="es", aprendizaje={}, authUser }) {
     else if (perfectos >= 3) tip = { emoji:"🏆", msg:t(idioma,"tip_maestro") };
   }
 
-  const levels = ["Encendedor 🔥","Fogonero 🪵","Parrillero 🥩","Maestro ⚡","Gran Maestro 🏆","Leyenda 🌟"];
+  const levelsES = ["Encendedor 🔥","Fogonero 🪵","Parrillero 🥩","Maestro ⚡","Gran Maestro 🏆","Leyenda 🌟"];
+  const levelsEN = ["Fire Starter 🔥","Stoker 🪵","Grillman 🥩","Grill Master ⚡","Grand Master 🏆","BBQ Legend 🌟"];
+  const levels = idioma==="en" ? levelsEN : levelsES;
 
   const saveEdit = () => {
     persist(prev => ({ ...prev, user:{ ...prev.user, nombre:nombre.trim()||prev.user.nombre, avatar } }));
@@ -2192,7 +2238,7 @@ function Perfil({ store, persist, go, idioma="es", aprendizaje={}, authUser }) {
             <div>
               <div style={{ fontSize:54, marginBottom:10 }}>{user?.avatar || "🧑‍🍳"}</div>
               <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:24, fontWeight:900 }}>{user?.nombre || "Parrillero"}</div>
-              <div style={{ color:"#8b7355", fontSize:13, marginTop:4 }}>{t(idioma,"nivel")} {lvl} · {TITLE(lvl)}</div>
+              <div style={{ color:"#8b7355", fontSize:13, marginTop:4 }}>{t(idioma,"nivel")} {lvl} · {TITLE(lvl, idioma)}</div>
               <div style={{ color:"#555", fontSize:11, marginTop:2 }}>{t(idioma,"desde")} {dateStr(user?.joinedAt || Date.now())}</div>
             </div>
           )}
@@ -2202,12 +2248,12 @@ function Perfil({ store, persist, go, idioma="es", aprendizaje={}, authUser }) {
             <div style={{ background:"#1a1005", borderRadius:16, padding:16, marginBottom:14, border:"1px solid #2a1a0a" }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
                 <div>
-                  <div style={{ color:"#ff8c42", fontSize:22, fontWeight:900 }}>Nv.{lvl}</div>
-                  <div style={{ color:"#8b7355", fontSize:12 }}>{TITLE(lvl)}</div>
+                  <div style={{ color:"#ff8c42", fontSize:22, fontWeight:900 }}>{idioma==="en" ? "Lv." : "Nv."}{lvl}</div>
+                  <div style={{ color:"#8b7355", fontSize:12 }}>{TITLE(lvl, idioma)}</div>
                 </div>
                 <div style={{ textAlign:"right" }}>
                   <div style={{ color:"#ff8c42", fontSize:16, fontWeight:700 }}>{xpCur} XP</div>
-                  <div style={{ color:"#555", fontSize:11 }}>de {xpNeed} para Nv.{lvl+1}</div>
+                  <div style={{ color:"#555", fontSize:11 }}>{idioma==="en" ? `of ${xpNeed} for Lv.${lvl+1}` : `de ${xpNeed} para Nv.${lvl+1}`}</div>
                 </div>
               </div>
               <div style={{ height:6, background:"#2a1a0a", borderRadius:3, overflow:"hidden" }}>
@@ -2272,13 +2318,13 @@ function Perfil({ store, persist, go, idioma="es", aprendizaje={}, authUser }) {
               </div>
             )}
             <button onClick={() => go("historial")} style={{ width:"100%", padding:14, background:"linear-gradient(135deg,#1a1005,#2a1800)", border:"1px solid #3a2a1a", borderRadius:14, color:"#ff8c42", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:10 }}>
-              📋 Ver historial completo
+              {t(idioma,"ver_historial")}
             </button>
             <button onClick={() => signOut(auth)} style={{ width:"100%", padding:11, background:"none", border:"1px solid #ff8c4244", borderRadius:14, color:"#ff8c42", fontSize:13, fontWeight:700, cursor:"pointer", marginBottom:10 }}>
-              🚪 Cerrar sesión
+              🚪 {idioma==="en" ? "Sign out" : "Cerrar sesión"}
             </button>
-            <button onClick={() => { if (window.confirm("¿Borrar todos los datos y empezar de cero?")) { signOut(auth); } }} style={{ width:"100%", padding:11, background:"none", border:"1px solid #2a1a0a", borderRadius:14, color:"#3a2a1a", fontSize:12, cursor:"pointer" }}>
-              🗑 Borrar cuenta y datos
+            <button onClick={() => { if (window.confirm(idioma==="en" ? "Delete all data and start over?" : "¿Borrar todos los datos y empezar de cero?")) { signOut(auth); } }} style={{ width:"100%", padding:11, background:"none", border:"1px solid #2a1a0a", borderRadius:14, color:"#3a2a1a", fontSize:12, cursor:"pointer" }}>
+              {t(idioma,"borrar_cuenta")}
             </button>
           </div>
         )}
