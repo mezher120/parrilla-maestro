@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, db, storage } from './firebase.js';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, getDocs, query, orderBy, arrayUnion, arrayRemove, updateDoc, increment, where, limit } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 // ── DATA (editá en src/data.js) ───────────────────────────────────
@@ -161,6 +161,21 @@ const T = {
     nombre_ph:"Ej: El Colo, Hernán, La Bochi...", nombre_sub:"Tu nombre de parrillero",
     siguiente:"Siguiente →", elegir_avatar:"Elegí tu avatar",
     empezar:"¡Empezar a asar! 🔥",
+    // Ranking
+    ranking:"El Ranking", ranking_sub:"ASADOS DE LA SEMANA",
+    ranking_empty:"Todavía no hay posts esta semana. ¡Sé el primero!",
+    ranking_tab_semana:"Esta semana", ranking_tab_ciudad:"Mi ciudad", ranking_tab_todos:"Todos",
+    ranking_compartir:"Compartir mi asado 🔥",
+    ranking_comentar:"Comentar", ranking_comentarios:"Comentarios", ranking_comentario_ph:"Tu comentario...",
+    ranking_enviar:"Enviar",
+    ranking_ciudad_ph:"Ej: Buenos Aires, Rosario...",
+    ranking_ciudad_lbl:"¿De qué ciudad sos?",
+    ranking_unirte:"¡Unite al ranking!",
+    ranking_unirte_desc:"Compartí tu asado y votá los de la comunidad.",
+    ranking_prompt_title:"¿Compartís tu asado?",
+    ranking_prompt_desc:"Subí tu asado al ranking y la comunidad vota con 🔥.",
+    ranking_si:"🔥 Sí, compartir",
+    ranking_no:"Ahora no",
   },
   en: {
     // Nav
@@ -261,6 +276,21 @@ const T = {
     nombre_ph:"E.g.: Big Mike, The Colo, Grill King...", nombre_sub:"Your grill name",
     siguiente:"Next →", elegir_avatar:"Choose your avatar",
     empezar:"Start grilling! 🔥",
+    // Ranking
+    ranking:"The Ranking", ranking_sub:"BBQs OF THE WEEK",
+    ranking_empty:"No posts this week yet. Be the first!",
+    ranking_tab_semana:"This week", ranking_tab_ciudad:"My city", ranking_tab_todos:"All",
+    ranking_compartir:"Share my BBQ 🔥",
+    ranking_comentar:"Comment", ranking_comentarios:"Comments", ranking_comentario_ph:"Your comment...",
+    ranking_enviar:"Send",
+    ranking_ciudad_ph:"E.g.: Buenos Aires, Rosario...",
+    ranking_ciudad_lbl:"What city are you from?",
+    ranking_unirte:"Join the ranking!",
+    ranking_unirte_desc:"Share your BBQ and vote for the community's.",
+    ranking_prompt_title:"Share your BBQ?",
+    ranking_prompt_desc:"Post your BBQ and the community votes with 🔥.",
+    ranking_si:"🔥 Yes, share",
+    ranking_no:"Not now",
   },
 };
 const t = (idioma, key) => (T[idioma] || T.es)[key] || key;
@@ -284,6 +314,8 @@ const CSS = `
 @keyframes pulseBtn { 0%,100%{box-shadow:0 6px 20px rgba(193,68,14,.4)} 50%{box-shadow:0 6px 32px rgba(193,68,14,.7)} }
 @keyframes popIn { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:scale(1)} }
 @keyframes confetti { 0%{transform:translateY(0) rotate(0) scale(1);opacity:1} 100%{transform:translateY(-140px) rotate(720deg) scale(0);opacity:0} }
+@keyframes llamaVote { 0%{transform:scale(1)} 50%{transform:scale(1.6) rotate(-10deg)} 100%{transform:scale(1)} }
+@keyframes slideUpModal { from{opacity:0;transform:translateY(100%)} to{opacity:1;transform:translateY(0)} }
 input[type=range] { width:100%; accent-color:#ff8c42; }
 ::-webkit-scrollbar { width:3px } ::-webkit-scrollbar-track { background:#0d0a07 } ::-webkit-scrollbar-thumb { background:#3a2010; border-radius:2px }
 `;
@@ -329,6 +361,92 @@ async function fbUploadFoto(uid, asadoId, base64DataUrl) {
     await uploadString(storageRef, base64DataUrl, 'data_url');
     return await getDownloadURL(storageRef);
   } catch(e) { console.error("uploadFoto:", e); return null; }
+}
+
+function getWeekId() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const start = new Date(year, 0, 1);
+  const week = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+function timeAgo(ts, idioma = 'es') {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return idioma === 'en' ? 'just now' : 'ahora';
+  if (diff < 3600) { const m = Math.floor(diff / 60); return idioma === 'en' ? `${m}m ago` : `hace ${m}m`; }
+  if (diff < 86400) { const h = Math.floor(diff / 3600); return idioma === 'en' ? `${h}h ago` : `hace ${h}h`; }
+  const d = Math.floor(diff / 86400); return idioma === 'en' ? `${d}d ago` : `hace ${d}d`;
+}
+
+async function fbCreatePost(uid, userData, asadoData, fotoUrl) {
+  try {
+    const post = {
+      userId: uid,
+      userNombre: userData.nombre || 'Parrillero',
+      userEmoji: userData.avatar || '🧑‍🍳',
+      userCiudad: userData.ciudad || '',
+      userNivel: userData.nivel || 1,
+      foto: fotoUrl || null,
+      cortes: asadoData.cortes || [],
+      coccion: asadoData.coccion || 'punto',
+      rating: asadoData.rating || 'perfecto',
+      nota: asadoData.nota || '',
+      timestamp: Date.now(),
+      llamas: [],
+      llamasCount: 0,
+      comentariosCount: 0,
+      semana: getWeekId(),
+    };
+    const docRef = await addDoc(collection(db, "posts"), post);
+    return docRef.id;
+  } catch(e) { console.error("createPost:", e); return null; }
+}
+
+async function fbGetPosts(tab, ciudad, weekId) {
+  try {
+    let q;
+    if (tab === 'semana') {
+      q = query(collection(db, "posts"), where("semana", "==", weekId), limit(50));
+    } else if (tab === 'ciudad' && ciudad) {
+      q = query(collection(db, "posts"), where("userCiudad", "==", ciudad), limit(50));
+    } else {
+      q = query(collection(db, "posts"), orderBy("timestamp", "desc"), limit(50));
+    }
+    const snap = await getDocs(q);
+    const posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return posts.sort((a, b) => (b.llamasCount || 0) - (a.llamasCount || 0));
+  } catch(e) { console.error("getPosts:", e); return []; }
+}
+
+async function fbToggleLlama(postId, uid, hasVoted) {
+  try {
+    await updateDoc(doc(db, "posts", postId), {
+      llamas: hasVoted ? arrayRemove(uid) : arrayUnion(uid),
+      llamasCount: increment(hasVoted ? -1 : 1),
+    });
+  } catch(e) { console.error("toggleLlama:", e); }
+}
+
+async function fbGetComments(postId) {
+  try {
+    const q = query(collection(db, "posts", postId, "comments"), orderBy("timestamp", "asc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) { console.error("getComments:", e); return []; }
+}
+
+async function fbAddComment(postId, uid, userData, text) {
+  try {
+    await addDoc(collection(db, "posts", postId, "comments"), {
+      userId: uid,
+      userNombre: userData?.nombre || 'Parrillero',
+      userEmoji: userData?.avatar || '🧑‍🍳',
+      texto: text,
+      timestamp: Date.now(),
+    });
+    await updateDoc(doc(db, "posts", postId), { comentariosCount: increment(1) });
+  } catch(e) { console.error("addComment:", e); }
 }
 
 function calcMultPersonal(asados, corteName, tipoParrilla) {
@@ -412,6 +530,7 @@ export default function App() {
           nombre: next.user?.nombre,
           avatar: next.user?.avatar,
           joinedAt: next.user?.joinedAt || Date.now(),
+          ciudad: next.user?.ciudad || '',
           config: next.config || DEFAULT_CONFIG,
           aprendizaje: next.aprendizaje || {},
         });
@@ -421,22 +540,23 @@ export default function App() {
   }, [authUser]);
 
   const saveAsado = useCallback(async (asado) => {
-    if (!authUser) return;
+    if (!authUser) return {};
     let asadoToSave = { ...asado };
-    // Upload photo to Storage if base64
+    let uploadedFotoUrl = (asado.foto && !asado.foto.startsWith("data:")) ? asado.foto : null;
     if (asado.foto && asado.foto.startsWith("data:")) {
       const tempId = `asado_${Date.now()}`;
       const fotoUrl = await fbUploadFoto(authUser.uid, tempId, asado.foto);
       asadoToSave = { ...asado, foto: fotoUrl || null };
+      uploadedFotoUrl = fotoUrl || null;
     }
     const newId = await fbSaveAsado(authUser.uid, asadoToSave);
     setStore(prev => {
       const aprendizaje = actualizarAprendizajeLocal(prev, asadoToSave);
       const newStore = { ...prev, asados:[...prev.asados, { ...asadoToSave, id: newId || asado.id }], aprendizaje };
-      // Persist aprendizaje back to Firestore
       if (authUser) fbSaveProfile(authUser.uid, { aprendizaje });
       return newStore;
     });
+    return { fotoUrl: uploadedFotoUrl };
   }, [authUser]);
 
   const go = (s) => {
@@ -470,7 +590,8 @@ export default function App() {
     if (screen === "preparaciones") return <Preparaciones go={go} idioma={idioma} isPremium={store.config?.premium||store.config?.completo||false} />;
     if (screen === "fuego")   return <Fuego go={go} idioma={idioma} />;
     if (screen === "simulacion") return <Simulacion store={store} persist={persist} go={go} setPendingAsado={setPendingAsado} tiempoMult={(store.config?.tiempoMult||100)/100} idioma={idioma} aprendizaje={store.aprendizaje||{}} chistesOn={store.config?.chistes !== false} />;
-    if (screen === "rating")  return <RatingScreen store={store} persist={persist} go={go} pendingAsado={pendingAsado} setPendingAsado={setPendingAsado} saveAsado={saveAsado} idioma={idioma} aprendizaje={store.aprendizaje||{}} isCompleto={store.config?.completo||false} />;
+    if (screen === "rating")  return <RatingScreen store={store} persist={persist} go={go} pendingAsado={pendingAsado} setPendingAsado={setPendingAsado} saveAsado={saveAsado} idioma={idioma} aprendizaje={store.aprendizaje||{}} isCompleto={store.config?.completo||false} authUser={authUser} />;
+    if (screen === "ranking") return <Ranking store={store} persist={persist} go={go} idioma={idioma} authUser={authUser} />;
     if (screen === "perfil")  return <Perfil store={store} persist={persist} go={go} idioma={idioma} aprendizaje={store.aprendizaje||{}} authUser={authUser} />;
     if (screen === "historial") return <Historial store={store} go={go} idioma={idioma} />;
     if (screen === "calculadora") return <Calculadora go={go} store={store} idioma={idioma} />;
@@ -702,6 +823,7 @@ function Home({ store, go, idioma='es' }) {
     { id:"fuego", label:t(idioma,"fuego"), emoji:"🔥", sub:t(idioma,"fuego_sub"), color:"#e07b00" },
     { id:"calculadora", label:t(idioma,"calculadora"), emoji:"⚖️", sub:t(idioma,"calc_sub"), color:"#1565c0" },
     { id:"simulacion", label:t(idioma,"simulacion"), emoji:"🎮", sub:t(idioma,"sim_sub"), color:"#8B2500" },
+    { id:"ranking", label:t(idioma,"ranking"), emoji:"🏆", sub:t(idioma,"ranking_sub"), color:"#b5a000" },
   ];
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
@@ -1884,7 +2006,7 @@ function CameraAnalysis({ cortes, idioma, isCompleto=false }) {
   );
 }
 
-function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveAsado, idioma="es", aprendizaje={}, isCompleto=false }) {
+function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveAsado, idioma="es", aprendizaje={}, isCompleto=false, authUser=null }) {
   const [rating, setRating] = useState(null);
   const [nota, setNota] = useState("");
   const [foto, setFoto] = useState(null);
@@ -1895,6 +2017,11 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
   const [aiConsejo, setAiConsejo] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [ajustesNuevos, setAjustesNuevos] = useState(null);
+  const [showRankingPrompt, setShowRankingPrompt] = useState(false);
+  const [rankingStep, setRankingStep] = useState('prompt');
+  const [savedFotoUrl, setSavedFotoUrl] = useState(null);
+  const [ciudadInput, setCiudadInput] = useState(store.user?.ciudad || '');
+  const [sharing, setSharing] = useState(false);
   const fileRef = useRef();
 
   const cortesData = pendingAsado?.cortesData || [];
@@ -1948,13 +2075,19 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
     reader.readAsDataURL(file);
   };
 
-  const guardar = () => {
+  const guardar = async () => {
     if (!rating || saved) return;
     const asado = { ...pendingAsado, rating, nota, foto };
-    saveAsado ? saveAsado(asado) : persist(prev => ({ ...prev, asados:[...prev.asados, asado] }));
+    const result = saveAsado ? await saveAsado(asado) : (persist(prev => ({ ...prev, asados:[...prev.asados, asado] })), {});
     if (rating === "perfecto") setShowConfetti(true);
     setSaved(true);
-    setTimeout(() => { setPendingAsado(null); go("historial"); }, rating==="perfecto" ? 2400 : 1400);
+    const fotoUrl = result?.fotoUrl;
+    if (fotoUrl) {
+      setSavedFotoUrl(fotoUrl);
+      setTimeout(() => setShowRankingPrompt(true), rating === "perfecto" ? 1200 : 600);
+    } else {
+      setTimeout(() => { setPendingAsado(null); go("historial"); }, rating === "perfecto" ? 2400 : 1400);
+    }
   };
 
   return (
@@ -2097,6 +2230,57 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
         </button>
         <button onClick={() => { setPendingAsado(null); go("home"); }} style={{ width:"100%", padding:12, background:"none", border:"none", color:"#555", fontSize:13, cursor:"pointer" }}>{t(idioma,"saltear")}</button>
       </div>
+
+      {/* Ranking prompt modal */}
+      {showRankingPrompt && (
+        <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,.88)", display:"flex", flexDirection:"column", justifyContent:"flex-end", zIndex:50 }}>
+          <div style={{ background:"#1a0800", borderRadius:"24px 24px 0 0", padding:"24px 22px 36px", animation:"slideUpModal .35s ease" }}>
+            {rankingStep === 'prompt' ? (
+              <>
+                <div style={{ textAlign:"center", marginBottom:20 }}>
+                  <div style={{ fontSize:48, marginBottom:8 }}>🔥</div>
+                  <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:22, fontWeight:900 }}>{t(idioma,"ranking_prompt_title")}</div>
+                  <div style={{ color:"#8b7355", fontSize:13, marginTop:6, lineHeight:1.6 }}>{t(idioma,"ranking_prompt_desc")}</div>
+                </div>
+                {savedFotoUrl && <img src={savedFotoUrl} alt="asado" style={{ width:"100%", height:160, objectFit:"cover", borderRadius:14, marginBottom:16, border:"1px solid #3a2a1a" }} />}
+                <button disabled={sharing} onClick={async () => {
+                  if (!store.user?.ciudad) { setRankingStep('ciudad'); return; }
+                  setSharing(true);
+                  await fbCreatePost(store.user.uid || authUser?.uid, store.user, { ...pendingAsado, rating, nota }, savedFotoUrl);
+                  setSharing(false);
+                  setPendingAsado(null); go("ranking");
+                }} style={{ width:"100%", padding:14, background:"linear-gradient(135deg,#c1440e,#8B2500)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:10, animation:"pulseBtn 2s ease-in-out infinite", opacity:sharing?0.7:1 }}>
+                  {sharing ? "..." : t(idioma,"ranking_si")}
+                </button>
+                <button onClick={() => { setShowRankingPrompt(false); setPendingAsado(null); go("historial"); }} style={{ width:"100%", padding:12, background:"none", border:"none", color:"#555", fontSize:13, cursor:"pointer" }}>
+                  {t(idioma,"ranking_no")}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:20, fontWeight:900, marginBottom:6 }}>{t(idioma,"ranking_ciudad_lbl")}</div>
+                <div style={{ color:"#8b7355", fontSize:13, marginBottom:16, lineHeight:1.5 }}>
+                  {idioma==="en" ? "So the community near you can see your BBQ." : "Para que la comunidad cerca tuyo vea tu asado."}
+                </div>
+                <input value={ciudadInput} onChange={e => setCiudadInput(e.target.value)} placeholder={t(idioma,"ranking_ciudad_ph")} style={{ background:"#2a1a0a", border:"1px solid #3a2a1a", borderRadius:10, color:"#f0e6d3", fontSize:14, padding:"10px 14px", width:"100%", outline:"none", fontFamily:"'Inter',sans-serif", marginBottom:14 }} />
+                <button disabled={!ciudadInput.trim() || sharing} onClick={async () => {
+                  if (!ciudadInput.trim()) return;
+                  setSharing(true);
+                  await persist(prev => ({ ...prev, user: { ...prev.user, ciudad: ciudadInput.trim() } }));
+                  await fbCreatePost(store.user?.uid || authUser?.uid, { ...store.user, ciudad: ciudadInput.trim() }, { ...pendingAsado, rating, nota }, savedFotoUrl);
+                  setSharing(false);
+                  setPendingAsado(null); go("ranking");
+                }} style={{ width:"100%", padding:14, background:"linear-gradient(135deg,#c1440e,#8B2500)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:10, opacity:(!ciudadInput.trim()||sharing)?0.5:1 }}>
+                  {sharing ? "..." : t(idioma,"ranking_si")}
+                </button>
+                <button onClick={() => { setShowRankingPrompt(false); setPendingAsado(null); go("historial"); }} style={{ width:"100%", padding:12, background:"none", border:"none", color:"#555", fontSize:13, cursor:"pointer" }}>
+                  {t(idioma,"ranking_no")}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2719,5 +2903,209 @@ function AlturaVis({ cm }) {
 function TxtInput({ value, onChange, placeholder, maxLength }) {
   return (
     <input type="text" value={value} onChange={onChange} placeholder={placeholder} maxLength={maxLength} style={{ background:"#1a1005", border:"1px solid #3a2a1a", borderRadius:10, color:"#f0e6d3", fontSize:14, padding:"10px 14px", width:"100%", outline:"none", fontFamily:"'Inter',sans-serif", marginBottom:16 }} />
+  );
+}
+
+// ── COMMENTS MODAL ────────────────────────────────────────────────
+function CommentsModal({ post, authUser, store, idioma, onClose }) {
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    fbGetComments(post.id).then(c => { setComments(c); setLoading(false); });
+  }, [post.id]);
+
+  const send = async () => {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    await fbAddComment(post.id, authUser?.uid, store.user, text.trim());
+    const updated = await fbGetComments(post.id);
+    setComments(updated);
+    setText('');
+    setSending(false);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.85)", display:"flex", flexDirection:"column", justifyContent:"flex-end", zIndex:100 }} onClick={onClose}>
+      <div style={{ background:"#1a1005", borderRadius:"20px 20px 0 0", maxHeight:"80vh", display:"flex", flexDirection:"column", animation:"slideUpModal .3s ease" }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding:"16px 18px 10px", borderBottom:"1px solid #2a1a0a", flexShrink:0, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ color:"#ff8c42", fontSize:14, fontWeight:700 }}>💬 {t(idioma,"ranking_comentarios")}</div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"#555", fontSize:20, cursor:"pointer" }}>✕</button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"12px 18px" }}>
+          {loading ? (
+            <div style={{ textAlign:"center", color:"#555", padding:24 }}>...</div>
+          ) : comments.length === 0 ? (
+            <div style={{ textAlign:"center", color:"#555", fontSize:13, padding:24 }}>
+              {idioma==="en" ? "No comments yet. Be the first!" : "Sin comentarios todavía. ¡Sé el primero!"}
+            </div>
+          ) : (
+            comments.map(c => (
+              <div key={c.id} style={{ display:"flex", gap:10, marginBottom:14 }}>
+                <div style={{ width:32, height:32, background:"#ff8c4222", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>{c.userEmoji}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                    <div style={{ color:"#f0e6d3", fontSize:12, fontWeight:700 }}>{c.userNombre}</div>
+                    <div style={{ color:"#555", fontSize:10 }}>{timeAgo(c.timestamp, idioma)}</div>
+                  </div>
+                  <div style={{ color:"#c9b49a", fontSize:13, marginTop:2, lineHeight:1.5 }}>{c.texto}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div style={{ padding:"10px 18px 24px", borderTop:"1px solid #2a1a0a", flexShrink:0, display:"flex", gap:10 }}>
+          <input value={text} onChange={e => setText(e.target.value)} placeholder={t(idioma,"ranking_comentario_ph")} onKeyDown={e => e.key==="Enter" && send()} style={{ flex:1, background:"#2a1a0a", border:"1px solid #3a2a1a", borderRadius:10, color:"#f0e6d3", fontSize:13, padding:"10px 14px", outline:"none", fontFamily:"'Inter',sans-serif" }} />
+          <button onClick={send} disabled={sending || !text.trim()} style={{ padding:"10px 16px", background:"linear-gradient(135deg,#c1440e,#8B2500)", border:"none", borderRadius:10, color:"white", fontSize:13, fontWeight:700, cursor:"pointer", flexShrink:0, opacity:(!text.trim()||sending)?0.5:1 }}>
+            {t(idioma,"ranking_enviar")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── POST CARD ─────────────────────────────────────────────────────
+function PostCard({ post, authUser, idioma, onComment, onVote }) {
+  const hasVoted = post.llamas?.includes(authUser?.uid);
+  const [voting, setVoting] = useState(false);
+  const [animating, setAnimating] = useState(false);
+
+  const handleVote = async () => {
+    if (voting || !authUser) return;
+    setVoting(true);
+    setAnimating(true);
+    await onVote(post.id, hasVoted);
+    setVoting(false);
+    setTimeout(() => setAnimating(false), 400);
+  };
+
+  return (
+    <div style={{ background:"#1a1005", borderRadius:16, marginBottom:12, border:"1px solid #2a1a0a", overflow:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px 8px" }}>
+        <div style={{ width:36, height:36, background:"#ff8c4222", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>{post.userEmoji}</div>
+        <div style={{ flex:1 }}>
+          <div style={{ color:"#f0e6d3", fontSize:13, fontWeight:700 }}>{post.userNombre}</div>
+          <div style={{ color:"#555", fontSize:10 }}>{post.userCiudad ? `${post.userCiudad} · ` : ''}{timeAgo(post.timestamp, idioma)}</div>
+        </div>
+        <div style={{ background:"#2a1a0a", borderRadius:8, padding:"3px 10px", fontSize:10, color:"#ff8c42", fontWeight:700 }}>Nv.{post.userNivel || 1}</div>
+      </div>
+      {post.foto && <img src={post.foto} alt="asado" style={{ width:"100%", height:200, objectFit:"cover", display:"block" }} />}
+      <div style={{ padding:"10px 14px" }}>
+        {post.cortes?.length > 0 && (
+          <div style={{ color:"#c9b49a", fontSize:12, marginBottom:4 }}>🥩 {post.cortes.join(" · ")}</div>
+        )}
+        {post.nota && (
+          <div style={{ color:"#8b7355", fontSize:13, lineHeight:1.5, marginBottom:8 }}>"{post.nota}"</div>
+        )}
+        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+          <button onClick={handleVote} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:authUser?"pointer":"default", padding:0 }}>
+            <span style={{ fontSize:22, filter:hasVoted?"none":"grayscale(1)", transition:"filter .2s", display:"inline-block", animation:animating?"llamaVote .4s ease":undefined }}>{animating && !hasVoted ? "🔥" : "🔥"}</span>
+            <span style={{ color:hasVoted?"#ff8c42":"#555", fontSize:14, fontWeight:700, transition:"color .2s" }}>{post.llamasCount || 0}</span>
+          </button>
+          <button onClick={onComment} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", padding:0 }}>
+            <span style={{ fontSize:18 }}>💬</span>
+            <span style={{ color:"#555", fontSize:13 }}>{post.comentariosCount || 0}</span>
+          </button>
+          <div style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+            <span style={{ background:`${rankColor(post.rating)}22`, borderRadius:6, padding:"3px 8px", color:rankColor(post.rating), fontSize:10, fontWeight:700 }}>{rankEmoji(post.rating)}</span>
+            <span style={{ background:"#2a1a0a", borderRadius:6, padding:"3px 8px", color:"#8b7355", fontSize:10 }}>{getCoccionLabel(post.coccion, idioma)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── RANKING ───────────────────────────────────────────────────────
+function Ranking({ store, persist, go, idioma="es", authUser }) {
+  const [tab, setTab] = useState('semana');
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [commentPost, setCommentPost] = useState(null);
+  const week = getWeekId();
+  const ciudad = store.user?.ciudad || '';
+
+  const loadPosts = async () => {
+    setLoading(true);
+    const data = await fbGetPosts(tab, ciudad, week);
+    setPosts(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadPosts(); }, [tab]);
+
+  const handleVote = async (postId, hasVoted) => {
+    if (!authUser) return;
+    await fbToggleLlama(postId, authUser.uid, hasVoted);
+    setPosts(prev => prev.map(p => p.id === postId ? {
+      ...p,
+      llamas: hasVoted ? (p.llamas || []).filter(id => id !== authUser.uid) : [...(p.llamas || []), authUser.uid],
+      llamasCount: (p.llamasCount || 0) + (hasVoted ? -1 : 1),
+    } : p));
+  };
+
+  const tabs = [
+    { id:'semana', label:t(idioma,"ranking_tab_semana") },
+    { id:'ciudad', label:t(idioma,"ranking_tab_ciudad") },
+    { id:'todos', label:t(idioma,"ranking_tab_todos") },
+  ];
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#0d0a07" }}>
+      <div style={{ padding:"48px 18px 0", background:"linear-gradient(180deg,#1a0800,#0d0a07)", flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <button onClick={() => go("home")} style={{ background:"none", border:"none", color:"#ff8c42", fontSize:24, cursor:"pointer", padding:0 }}>‹</button>
+            <span style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:24, fontWeight:900 }}>{t(idioma,"ranking")}</span>
+          </div>
+          <div style={{ background:"#2a1a0a", borderRadius:8, padding:"3px 10px", color:"#ff8c42", fontSize:10, fontWeight:700 }}>{week}</div>
+        </div>
+        <div style={{ color:"#6b5a3e", fontSize:11, marginBottom:12, paddingLeft:32 }}>{t(idioma,"ranking_sub")}</div>
+        <div style={{ display:"flex", gap:0, borderBottom:"1px solid #2a1a0a" }}>
+          {tabs.map(tab_item => (
+            <button key={tab_item.id} onClick={() => setTab(tab_item.id)} style={{ flex:1, padding:"9px 4px", background:"none", border:"none", borderBottom:`2px solid ${tab===tab_item.id?"#ff8c42":"transparent"}`, color:tab===tab_item.id?"#ff8c42":"#555", fontSize:11, fontWeight:700, cursor:"pointer", transition:"all .2s" }}>
+              {tab_item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex:1, overflowY:"auto", padding:"12px 14px 32px" }}>
+        {loading ? (
+          <div style={{ textAlign:"center", padding:48 }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>🔥</div>
+            <div style={{ color:"#555", fontSize:13 }}>{idioma==="en" ? "Loading..." : "Cargando..."}</div>
+          </div>
+        ) : posts.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"48px 24px" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🏆</div>
+            <div style={{ color:"#ff8c42", fontSize:16, fontWeight:700, marginBottom:6 }}>{t(idioma,"ranking_unirte")}</div>
+            <div style={{ color:"#555", fontSize:13, lineHeight:1.6, marginBottom:20 }}>{t(idioma,"ranking_empty")}</div>
+            <button onClick={() => go("simulacion")} style={{ padding:"12px 24px", background:"linear-gradient(135deg,#c1440e,#8B2500)", border:"none", borderRadius:14, color:"white", fontSize:14, fontWeight:700, cursor:"pointer", animation:"pulseBtn 3s ease-in-out infinite" }}>
+              {idioma==="en" ? "🔥 Start a BBQ" : "🔥 Hacer un asado"}
+            </button>
+          </div>
+        ) : (
+          posts.map((post, idx) => (
+            <div key={post.id}>
+              {idx < 3 && (
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, paddingLeft:2 }}>
+                  <span style={{ fontSize:18 }}>{idx===0?"🥇":idx===1?"🥈":"🥉"}</span>
+                  <span style={{ color:"#555", fontSize:11 }}>#{idx+1}</span>
+                </div>
+              )}
+              <PostCard post={post} authUser={authUser} idioma={idioma} onVote={handleVote} onComment={() => setCommentPost(post)} />
+            </div>
+          ))
+        )}
+      </div>
+
+      {commentPost && (
+        <CommentsModal post={commentPost} authUser={authUser} store={store} idioma={idioma} onClose={() => setCommentPost(null)} />
+      )}
+    </div>
   );
 }
