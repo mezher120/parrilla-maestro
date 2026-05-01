@@ -8,12 +8,16 @@ import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import {
   td, getCoccionLabel,
   CORTES_VACUNO, CORTES_CERDO, ACHURAS, PREMIUM_CORTES,
-  CORTE_IMAGES, METODOS_FUEGO, SIMULACION_CORTES,
+  CORTE_IMAGES, FUEGO_IMAGES, METODOS_FUEGO, SIMULACION_CORTES,
   COCCION_MULT, COCCION_LABELS, COCCION_COLORS,
   ALTURA_SCHEDULE, CARBON_NOTIFS, AVATAR_OPTIONS,
 } from './data.js';
 
 // ── UTILS ─────────────────────────────────────────────────────────
+const ACHURA_IDS = new Set(ACHURAS.map(a => a.id));
+// Returns the coccion multiplier for a cut — achuras always use 1 (fixed time)
+const cutCoccionMult = (c, coccion) => ACHURA_IDS.has(c.id) ? 1 : COCCION_MULT[coccion];
+
 function getAlturaAt(mins, tipo) {
   if (tipo === "fixed") return 15;
   let cm = 25;
@@ -21,7 +25,7 @@ function getAlturaAt(mins, tipo) {
   return cm;
 }
 function buildEvents(selected, coccion, tipoParrilla, tiempoMult=1, aprendizaje={}, idioma='es') {
-  const getCutMult = (c) => (aprendizaje[c.nombre]?.[tipoParrilla] || 1) * tiempoMult * COCCION_MULT[coccion];
+  const getCutMult = (c) => (aprendizaje[c.nombre]?.[tipoParrilla] || 1) * tiempoMult * cutCoccionMult(c, coccion);
   const events = [];
   selected.forEach(c => c.eventos.forEach(ev => {
     const m = Math.round(ev.min * getCutMult(c));
@@ -164,7 +168,7 @@ const T = {
     // Ranking
     ranking:"El Ranking", ranking_sub:"ASADOS DE LA SEMANA",
     ranking_empty:"Todavía no hay posts esta semana. ¡Sé el primero!",
-    ranking_tab_semana:"Esta semana", ranking_tab_ciudad:"Mi ciudad", ranking_tab_todos:"Todos",
+    ranking_tab_semana:"Esta semana", ranking_tab_ciudad:"Mi ciudad", ranking_tab_todos:"Todos", ranking_tab_hof:"👑 Hall of Fame",
     ranking_compartir:"Compartir mi asado 🔥",
     ranking_comentar:"Comentar", ranking_comentarios:"Comentarios", ranking_comentario_ph:"Tu comentario...",
     ranking_enviar:"Enviar",
@@ -279,7 +283,7 @@ const T = {
     // Ranking
     ranking:"The Ranking", ranking_sub:"BBQs OF THE WEEK",
     ranking_empty:"No posts this week yet. Be the first!",
-    ranking_tab_semana:"This week", ranking_tab_ciudad:"My city", ranking_tab_todos:"All",
+    ranking_tab_semana:"This week", ranking_tab_ciudad:"My city", ranking_tab_todos:"All", ranking_tab_hof:"👑 Hall of Fame",
     ranking_compartir:"Share my BBQ 🔥",
     ranking_comentar:"Comment", ranking_comentarios:"Comments", ranking_comentario_ph:"Your comment...",
     ranking_enviar:"Send",
@@ -842,9 +846,6 @@ function Home({ store, go, idioma='es' }) {
             <button onClick={() => go("historial")} style={{ background:"#1a1005", border:"1px solid #2a1a0a", borderRadius:10, padding:"6px 12px", color:"#ff8c42", fontSize:11, fontWeight:700, cursor:"pointer" }}>
               📋 {asados.length}
             </button>
-            {!store.config?.premium && !store.config?.completo && (
-              <button onClick={() => go("premium")} style={{ background:"linear-gradient(135deg,#2d1f00,#1a1200)", border:"1px solid #ffd70055", borderRadius:10, padding:"6px 10px", color:"#ffd700", fontSize:11, fontWeight:700, cursor:"pointer" }}>⭐ VIP</button>
-            )}
             <button onClick={() => go("ajustes")} style={{ background:"#1a1005", border:"1px solid #2a1a0a", borderRadius:10, padding:"6px 10px", color:"#8b7355", fontSize:14, cursor:"pointer" }}>⚙️</button>
           </div>
         </div>
@@ -879,6 +880,15 @@ function Home({ store, go, idioma='es' }) {
             <div style={{ marginLeft:"auto", color:b.color, fontSize:20 }}>›</div>
           </button>
         ))}
+        {!store.config?.premium && !store.config?.completo && (
+          <button onClick={() => go("premium")} style={{ width:"100%", background:"linear-gradient(135deg,#2d1f00,#1a1200)", border:"1px solid #ffd70055", borderRadius:16, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left", animation:"pulseBtn 3s ease-in-out infinite" }}>
+            <div style={{ color:"#ffd700", fontSize:14, fontWeight:900, marginBottom:4 }}>⭐ {idioma==="en" ? "Unlock the full plan" : "Desbloqueá el plan completo"}</div>
+            <div style={{ color:"#8b7355", fontSize:11, marginBottom:12 }}>{idioma==="en" ? "VIP Cuts · Unlimited AI · Photos" : "Cortes VIP · IA sin límites · Fotos"}</div>
+            <div style={{ background:"linear-gradient(135deg,#ffd700,#ff8c42)", borderRadius:10, padding:"9px 0", textAlign:"center", color:"#1a0a00", fontSize:13, fontWeight:900 }}>
+              {idioma==="en" ? "Unlock — $2.99/mo" : "Desbloquear — $2.99/mes"}
+            </div>
+          </button>
+        )}
         {asados.length > 0 && (
           <div style={{ display:"flex", gap:8, marginTop:4 }}>
             {[["🏆",`${avgRating(asados)}%`,"precisión"],["🔥",asados.length,"asados"],["🥩",favCorte(asados)||"—","favorito"]].map(([em,v,l]) => (
@@ -1049,6 +1059,42 @@ function CorteDetail({ corte, onBack, idioma='es' }) {
   );
 }
 
+// ── FUEGO IMAGE BLOCK ─────────────────────────────────────────────
+function FuegoImgBlock({ storagePath, emoji, c1, c2, idioma }) {
+  const [imgUrl, setImgUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!storagePath) { setFailed(true); return; }
+    getDownloadURL(ref(storage, storagePath))
+      .then(url => setImgUrl(url))
+      .catch(err => { console.error("[FuegoImg]", err.code, storagePath); setFailed(true); });
+  }, [storagePath]);
+
+  const showPlaceholder = failed || !imgUrl;
+  return (
+    <div style={{ height:160, borderRadius:12, marginBottom:12, overflow:"hidden", position:"relative", background:`linear-gradient(135deg,${c1},${c2})` }}>
+      {imgUrl && !failed && (
+        <img
+          src={imgUrl}
+          alt={emoji}
+          onError={() => setFailed(true)}
+          style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter:"saturate(1.2) contrast(1.05) brightness(0.85)" }}
+        />
+      )}
+      {showPlaceholder && (
+        <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+          <span style={{ fontSize:64, lineHeight:1, filter:"drop-shadow(0 4px 12px rgba(0,0,0,.5))" }}>{emoji}</span>
+          <span style={{ color:"rgba(255,255,255,.45)", fontSize:11 }}>📸 {idioma==="en" ? "Image coming soon" : "Imagen próximamente"}</span>
+        </div>
+      )}
+      {imgUrl && !failed && (
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg,transparent 50%,rgba(0,0,0,.45))" }} />
+      )}
+    </div>
+  );
+}
+
 // ── FUEGO ─────────────────────────────────────────────────────────
 function Fuego({ go, idioma="es" }) {
   return (
@@ -1059,8 +1105,12 @@ function Fuego({ go, idioma="es" }) {
           <div style={{ color:"#ff8c42", fontSize:11, fontWeight:700, marginBottom:4 }}>{t(idioma,"regla_oro")}</div>
           <div style={{ color:"#c9b49a", fontSize:13, lineHeight:1.6 }}>{t(idioma,"regla_oro_txt")}</div>
         </div>
-        {METODOS_FUEGO.map(m => (
-          <div key={m.id} style={{ background:"#1a1005", borderRadius:14, padding:15, marginBottom:11, border:"1px solid #2a1a0a" }}>
+        {METODOS_FUEGO.map(m => {
+          const fuegoColors = { piramide:["#c1440e","#8B2500"], chimenea:["#1a3a5c","#0d1f33"], minion:["#4a1a6b","#2a0a3a"], leña:["#5c3010","#2a1200"], infalible:["#1a5c1a","#0a2a0a"] };
+          const [c1, c2] = fuegoColors[m.id] || ["#2d1200","#1a0a00"];
+          return (
+          <div key={m.id} style={{ background:"#1a1005", borderRadius:14, padding:15, marginBottom:11, border:"1px solid #2a1a0a", overflow:"hidden" }}>
+            <FuegoImgBlock storagePath={FUEGO_IMAGES[m.id]} emoji={m.emoji} c1={c1} c2={c2} idioma={idioma} />
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
               <span style={{ fontSize:26 }}>{m.emoji}</span>
               <div>
@@ -1073,7 +1123,8 @@ function Fuego({ go, idioma="es" }) {
             </div>
             <p style={{ color:"#8b7355", fontSize:12, lineHeight:1.65, margin:0 }}>{td(m,'descripcion',idioma)}</p>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1094,7 +1145,21 @@ function Calculadora({ go, store, idioma="es" }) {
   const achuraG = chorizosG + otrasAchurasG;
   const totalG = carneG + achuraG;
   const totalKg = (totalG / 1000).toFixed(2);
-  const carbonKg = (Math.ceil(+totalKg * 2 * 10) / 10).toFixed(1);
+  const carbonKg = (() => {
+    let kg;
+    if (comensales <= 2) {
+      kg = 3;
+    } else if (comensales <= 10) {
+      kg = (comensales * 0.5) * 2;
+    } else {
+      kg = (comensales * 0.5) * 1.5;
+    }
+    if (achuras) kg += 1;
+    return Math.max(3, Math.round(kg * 10) / 10);
+  })();
+  const proporcionLabel = comensales > 10
+    ? (idioma==="en" ? "1.5:1 ratio · min 3 kg" : "proporción 1.5:1 · mín 3 kg")
+    : (idioma==="en" ? "2:1 ratio · min 3 kg"   : "proporción 2:1 · mín 3 kg");
 
   // Cortes de carne (suman 100% de carneG)
   const cortesCarne = [
@@ -1141,7 +1206,7 @@ function Calculadora({ go, store, idioma="es" }) {
               <div style={{ fontSize:28, marginBottom:4 }}>🔥</div>
               <div style={{ color:"#e07b00", fontSize:26, fontWeight:900, lineHeight:1 }}>{carbonKg}</div>
               <div style={{ color:"#8b7355", fontSize:11, marginTop:3 }}>{t(idioma,"kg_carbon")}</div>
-              <div style={{ color:"#555", fontSize:10, marginTop:1 }}>{t(idioma,"proporcion")}</div>
+              <div style={{ color:"#555", fontSize:10, marginTop:1 }}>{proporcionLabel}</div>
             </div>
           </div>
           {achuras && (
@@ -1435,7 +1500,7 @@ function SimPlaceCortes({ selected, coccion, tipoParrilla, startGrilling, idioma
             <span style={{ color:"#ff8c42", fontSize:12, fontWeight:700 }}>{i+1}°</span>
             <span style={{ fontSize:18 }}>{c.emoji}</span>
             <span style={{ color:"#c9b49a", fontSize:13 }}>{c.nombre}</span>
-            <span style={{ color:"#555", fontSize:11, marginLeft:"auto" }}>{Math.round(c.tiempo * COCCION_MULT[coccion])} min</span>
+            <span style={{ color:"#555", fontSize:11, marginLeft:"auto" }}>{Math.round(c.tiempo * cutCoccionMult(c, coccion))} min</span>
           </div>
         ))}
       </Card>
@@ -1500,7 +1565,7 @@ function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, se
   );
 }
 
-function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParrilla, coccion, activeNotif, notifs, step, onDone, onReset, vozActiva, setVozActiva, idioma="es", aprendizaje={}, tiempoMultGlobal=1, isCompleto=false }) {
+function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParrilla, coccion, activeNotif, notifs, step, onDone, onReset, vozActiva, setVozActiva, idioma="es", aprendizaje={}, tiempoMultGlobal=1, isCompleto=false, isPremium=false, onGoPremium }) {
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
       {/* Barra de voz */}
@@ -1551,7 +1616,7 @@ function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParril
           </div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:5, justifyContent:"center", position:"relative", zIndex:2, alignItems:"center" }}>
             {selected.map(corte => {
-              const adjT = Math.round(corte.tiempo * COCCION_MULT[coccion] * (aprendizaje?.[corte.nombre]?.[tipoParrilla] || 1) * (typeof tiempoMult !== 'undefined' ? tiempoMult : 1));
+              const adjT = Math.round(corte.tiempo * cutCoccionMult(corte, coccion) * (aprendizaje?.[corte.nombre]?.[tipoParrilla] || 1) * (typeof tiempoMult !== 'undefined' ? tiempoMult : 1));
               const done = mins >= adjT;
               const pct = Math.min(mins / adjT, 1);
               return (
@@ -1587,7 +1652,7 @@ function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParril
           ))
         )}
       </div>
-      <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} isCompleto={isCompleto} />
+      <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} isCompleto={isCompleto} isPremium={isPremium} onGoPremium={onGoPremium} />
       {step === "done" && (
         <div style={{ padding:"8px 13px 24px", flexShrink:0 }}>
           <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
@@ -1682,7 +1747,7 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
     const personal = aprendizaje[c.nombre]?.[tipoParrilla] || 1;
     return tiempoMult * personal;
   };
-  const maxTime = selected.length > 0 ? Math.max(...selected.map(c => Math.round(c.tiempo * COCCION_MULT[coccion] * efectivoMult(c)))) : 0;
+  const maxTime = selected.length > 0 ? Math.max(...selected.map(c => Math.round(c.tiempo * cutCoccionMult(c, coccion) * efectivoMult(c)))) : 0;
   const mins = Math.floor(timer / 60);
   const secs = timer % 60;
   const progress = maxTime > 0 ? Math.min(mins / maxTime, 1) : 0;
@@ -1697,7 +1762,7 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
     const multMap = {};
     use.forEach(c => { multMap[c.id] = (aprendizaje[c.nombre]?.[tipoParrilla] || 1) * tiempoMult; });
     const baseEvents = buildEvents(use, coccion, tipoParrilla, tiempoMult, aprendizaje, idioma);
-    const maxT = use.length > 0 ? Math.max(...use.map(c => Math.round(c.tiempo * COCCION_MULT[coccion] * (aprendizaje[c.nombre]?.[tipoParrilla]||1) * tiempoMult))) : 60;
+    const maxT = use.length > 0 ? Math.max(...use.map(c => Math.round(c.tiempo * cutCoccionMult(c, coccion) * (aprendizaje[c.nombre]?.[tipoParrilla]||1) * tiempoMult))) : 60;
     const allEvents = chistesOn
       ? [...baseEvents, ...buildChisteEvents(maxT, idioma)].sort((a,b)=>a.min-b.min)
       : baseEvents;
@@ -1731,7 +1796,7 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
     setPendingAsado({
       id: Date.now(), ts: Date.now(),
       cortes: use.map(c => c.nombre),
-      cortesData: use.map(c => ({ nombre: c.nombre, emoji: c.emoji, color: c.color, tiempoBase: c.tiempo })),
+      cortesData: use.map(c => ({ id: c.id, nombre: c.nombre, emoji: c.emoji, color: c.color, tiempoBase: c.tiempo })),
       coccion, tipoParrilla, mode, duracion: maxTime,
       tiempoMultUsado: tiempoMult,
       multUsados,
@@ -1843,7 +1908,7 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
       {step === "fireCheck"     && <SimFireCheck idioma={idioma} tipoParrilla={tipoParrilla} setStep={setStep} />}
       {step === "placeCortes"   && <SimPlaceCortes idioma={idioma} selected={selected} coccion={coccion} tipoParrilla={tipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} />}
       {step === "fireCheckPro"  && <SimProFlow idioma={idioma} selected={selected} toggleSel={toggleSel} coccion={coccion} setCoccion={setCoccion} tipoParrilla={tipoParrilla} setTipoParrilla={setTipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} />}
-      {(step === "grilling" || step === "done") && <SimGrilling idioma={idioma} selected={selected} mins={mins} secs={secs} progress={progress} currentAltura={currentAltura} tipoParrilla={tipoParrilla} coccion={coccion} activeNotif={activeNotif} notifs={notifs} step={step} onDone={handleDone} onReset={resetSim} vozActiva={vozActiva} setVozActiva={setVozActiva} aprendizaje={aprendizaje} tiempoMultGlobal={tiempoMult} isCompleto={store.config?.completo||false} />}
+      {(step === "grilling" || step === "done") && <SimGrilling idioma={idioma} selected={selected} mins={mins} secs={secs} progress={progress} currentAltura={currentAltura} tipoParrilla={tipoParrilla} coccion={coccion} activeNotif={activeNotif} notifs={notifs} step={step} onDone={handleDone} onReset={resetSim} vozActiva={vozActiva} setVozActiva={setVozActiva} aprendizaje={aprendizaje} tiempoMultGlobal={tiempoMult} isCompleto={store.config?.completo||false} isPremium={store.config?.premium===true} onGoPremium={() => go("premium")} />}
     </div>
   );
 }
@@ -1902,12 +1967,13 @@ async function analizarFotoAsado(base64DataUrl, cortes, idioma) {
 }
 
 // ── CAMERA ANALYSIS ───────────────────────────────────────────────
-function CameraAnalysis({ cortes, idioma, isCompleto=false }) {
+function CameraAnalysis({ cortes, idioma, isCompleto=false, isPremium=false, onGoPremium }) {
   const [open, setOpen] = useState(false);
   const [foto, setFoto] = useState(null);
   const [loading, setLoading] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
   const fileRef = useRef();
 
   const hasKey = import.meta.env.VITE_ANTHROPIC_KEY && !import.meta.env.VITE_ANTHROPIC_KEY.startsWith("sk-ant-api03-REEMPLAZA");
@@ -1928,23 +1994,42 @@ function CameraAnalysis({ cortes, idioma, isCompleto=false }) {
   const reset = () => { setFoto(null); setResultado(null); setError(false); };
   const close = () => { setOpen(false); reset(); };
 
-  if (!isCompleto) return (
-    <div style={{ margin:"8px 13px 0", padding:"11px 14px", background:"linear-gradient(135deg,#12091a,#1a0a2a)", border:"1px solid #9c27b033", borderRadius:12, display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-      <span style={{ fontSize:20, opacity:.5 }}>📷</span>
-      <div style={{ flex:1 }}>
-        <div style={{ color:"#7b3f9e", fontSize:12, fontWeight:700 }}>{idioma==="en" ? "AI Photo Analysis" : "Análisis de foto con IA"} <span style={{ fontSize:10 }}>🔒</span></div>
-        <div style={{ color:"#4a2d5a", fontSize:11, marginTop:2 }}>{idioma==="en" ? "Available in Plan Completo" : "Disponible en Plan Completo"}</div>
-      </div>
-      <span style={{ background:"#9c27b022", border:"1px solid #9c27b044", borderRadius:8, padding:"4px 9px", color:"#9c27b0", fontSize:10, fontWeight:700, whiteSpace:"nowrap" }}>✨ Completo</span>
-    </div>
-  );
+  const handleOpenAnalysis = () => {
+    if (!isPremium) { setShowPremiumModal(true); return; }
+    setOpen(true);
+  };
 
   if (!open) return (
-    <button onClick={() => setOpen(true)} style={{ margin:"8px 13px 0", width:"calc(100% - 26px)", padding:"10px 14px", background:"linear-gradient(135deg,#0d1a0d,#1a2a1a)", border:"1px solid #4caf5044", borderRadius:12, color:"#4caf50", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, flexShrink:0 }}>
-      <span>📷</span>
-      <span>{idioma==="en" ? "Analyze my BBQ with AI" : "Analizá mi asado con IA"}</span>
-      <span style={{ background:"#4caf5033", borderRadius:6, padding:"2px 7px", fontSize:10 }}>✨ AI</span>
-    </button>
+    <>
+      <button onClick={handleOpenAnalysis} style={{ margin:"8px 13px 0", width:"calc(100% - 26px)", padding:"10px 14px", background:"linear-gradient(135deg,#0d1a0d,#1a2a1a)", border:"1px solid #4caf5044", borderRadius:12, color:"#4caf50", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, flexShrink:0 }}>
+        <span>📷</span>
+        <span>{idioma==="en" ? "Analyze my BBQ with AI" : "Analizá mi asado con IA"}</span>
+        <span style={{ background:"#4caf5033", borderRadius:6, padding:"2px 7px", fontSize:10 }}>✨ AI</span>
+      </button>
+      {showPremiumModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.75)", zIndex:9999, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowPremiumModal(false)}>
+          <div style={{ background:"linear-gradient(180deg,#1a0e2a,#120a1e)", borderRadius:"24px 24px 0 0", padding:"28px 24px 40px", width:"100%", maxWidth:440, animation:"slideUpModal .3s ease" }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign:"center", marginBottom:20 }}>
+              <div style={{ fontSize:40, marginBottom:10 }}>🔒</div>
+              <div style={{ color:"#ffd700", fontSize:18, fontWeight:900, marginBottom:8 }}>{idioma==="en" ? "Premium Feature" : "Función Premium"}</div>
+              <div style={{ color:"#8b7355", fontSize:13, lineHeight:1.65 }}>
+                {idioma==="en"
+                  ? "AI photo analysis is exclusive\nto the Premium plan."
+                  : "El análisis de foto con IA es exclusivo\ndel plan Premium."}
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <button onClick={() => { setShowPremiumModal(false); if (onGoPremium) onGoPremium(); }} style={{ width:"100%", padding:14, background:"linear-gradient(135deg,#ffd700,#ff8c42)", border:"none", borderRadius:14, color:"#1a0a00", fontSize:15, fontWeight:900, cursor:"pointer" }}>
+                ⭐ {idioma==="en" ? "See plans" : "Ver planes"}
+              </button>
+              <button onClick={() => setShowPremiumModal(false)} style={{ width:"100%", padding:14, background:"none", border:"2px solid #4caf50", borderRadius:14, color:"#4caf50", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                🔥 {idioma==="en" ? "Keep cooking" : "Seguir cocinando"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 
   return (
@@ -2106,8 +2191,9 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
           {(pendingAsado.cortesData || pendingAsado.cortes.map(n=>({nombre:n,emoji:"🥩",color:"#8B1A1A",tiempoBase:0}))).map((c, i) => {
             const multUsado = pendingAsado.multUsados?.[c.nombre] || 1;
             const tiempoBase = c.tiempoBase || 0;
-            const tiempoReal = tiempoBase ? Math.round(tiempoBase * COCCION_MULT[pendingAsado.coccion] * multUsado) : null;
-            const tiempoEstandar = tiempoBase ? Math.round(tiempoBase * COCCION_MULT[pendingAsado.coccion]) : null;
+            const cMult = cutCoccionMult(c, pendingAsado.coccion);
+            const tiempoReal = tiempoBase ? Math.round(tiempoBase * cMult * multUsado) : null;
+            const tiempoEstandar = tiempoBase ? Math.round(tiempoBase * cMult) : null;
             const ajustado = tiempoReal && tiempoEstandar && Math.abs(tiempoReal - tiempoEstandar) > 0;
             return (
               <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderBottom:i<pendingAsado.cortes.length-1?"1px solid #2a1a0a":"none" }}>
@@ -3047,10 +3133,24 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
     } : p));
   };
 
+  const HALL_OF_FAME_EJEMPLO = [
+    { nombre:"El Colo",   emoji:"🧑‍🍳", ciudad:"Buenos Aires", nivel:"Leyenda",      oros:12, platas:8,  cobres:5 },
+    { nombre:"La Bochi",  emoji:"👩‍🍳", ciudad:"Córdoba",      nivel:"Gran Maestro", oros:9,  platas:11, cobres:6 },
+    { nombre:"Hernán",    emoji:"🤠",   ciudad:"Rosario",      nivel:"Gran Maestro", oros:8,  platas:6,  cobres:9 },
+    { nombre:"El Turco",  emoji:"😎",   ciudad:"Mendoza",      nivel:"Maestro",      oros:6,  platas:9,  cobres:7 },
+    { nombre:"Nadia",     emoji:"👩‍🍳", ciudad:"Buenos Aires", nivel:"Maestro",      oros:5,  platas:7,  cobres:11 },
+    { nombre:"Pipe",      emoji:"🔥",   ciudad:"Mar del Plata",nivel:"Parrillero",   oros:4,  platas:5,  cobres:8 },
+    { nombre:"El Gordo",  emoji:"🐂",   ciudad:"Tucumán",      nivel:"Parrillero",   oros:3,  platas:6,  cobres:5 },
+    { nombre:"Caro",      emoji:"⚡",   ciudad:"Salta",        nivel:"Parrillero",   oros:2,  platas:4,  cobres:7 },
+    { nombre:"Mati",      emoji:"🧑‍🍳", ciudad:"La Plata",     nivel:"Fogonero",     oros:1,  platas:3,  cobres:6 },
+    { nombre:"Sol",       emoji:"👩‍🍳", ciudad:"Neuquén",      nivel:"Fogonero",     oros:1,  platas:2,  cobres:4 },
+  ];
+
   const tabs = [
     { id:'semana', label:t(idioma,"ranking_tab_semana") },
     { id:'ciudad', label:t(idioma,"ranking_tab_ciudad") },
     { id:'todos', label:t(idioma,"ranking_tab_todos") },
+    { id:'hof',   label:t(idioma,"ranking_tab_hof") },
   ];
 
   return (
@@ -3074,7 +3174,42 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
       </div>
 
       <div style={{ flex:1, overflowY:"auto", padding:"12px 14px 32px" }}>
-        {loading ? (
+        {tab === "hof" ? (
+          <div>
+            <div style={{ textAlign:"center", padding:"12px 0 16px" }}>
+              <div style={{ fontSize:36, marginBottom:4 }}>👑</div>
+              <div style={{ color:"#ffd700", fontSize:15, fontWeight:900, fontFamily:"'Playfair Display',serif" }}>{idioma==="en" ? "Hall of Fame" : "Hall of Fame"}</div>
+              <div style={{ color:"#6b5a3e", fontSize:11, marginTop:3 }}>{idioma==="en" ? "All-time top 10" : "Top 10 de todos los tiempos"}</div>
+            </div>
+            {HALL_OF_FAME_EJEMPLO.map((p, idx) => {
+              const posEmoji = idx===0?"👑":idx===1?"🥈":idx===2?"🥉":null;
+              const borderColor = idx===0?"#ffd700":idx===1?"#c0c0c0":idx===2?"#cd7f32":"#2a1a0a";
+              const bg = idx===0?"#1a1005":idx===1?"#111318":idx===2?"#140f09":"#1a1005";
+              return (
+                <div key={p.nombre} style={{ background:bg, borderRadius:14, border:`1.5px solid ${borderColor}`, padding:"13px 14px", marginBottom:9, animation:"slideUp .4s ease both", animationDelay:`${idx*0.06}s`, opacity:0, animationFillMode:"forwards" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:11 }}>
+                    <div style={{ minWidth:34, textAlign:"center" }}>
+                      {posEmoji
+                        ? <span style={{ fontSize:22 }}>{posEmoji}</span>
+                        : <span style={{ color:"#555", fontSize:15, fontWeight:700 }}>#{idx+1}</span>
+                      }
+                    </div>
+                    <span style={{ fontSize:30 }}>{p.emoji}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ color:"#f0e6d3", fontSize:14, fontWeight:700, lineHeight:1.2 }}>{p.nombre}</div>
+                      <div style={{ color:"#6b5a3e", fontSize:11, marginTop:2 }}>{p.ciudad} · {p.nivel}</div>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:12, marginTop:10, paddingTop:9, borderTop:`1px solid ${borderColor}33` }}>
+                    <span style={{ color:"#ffd700", fontSize:12, fontWeight:700 }}>🥇 {p.oros}</span>
+                    <span style={{ color:"#c0c0c0", fontSize:12, fontWeight:700 }}>🥈 {p.platas}</span>
+                    <span style={{ color:"#cd7f32", fontSize:12, fontWeight:700 }}>🥉 {p.cobres}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : loading ? (
           <div style={{ textAlign:"center", padding:48 }}>
             <div style={{ fontSize:32, marginBottom:8 }}>🔥</div>
             <div style={{ color:"#555", fontSize:13 }}>{idioma==="en" ? "Loading..." : "Cargando..."}</div>

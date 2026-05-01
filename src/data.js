@@ -412,6 +412,15 @@ export const CORTE_IMAGES = {
   "choclo":         `${_FB}choclo.jpg${_Q}`,
 };
 
+// Storage paths for fuego method images (used with getDownloadURL in App.jsx)
+export const FUEGO_IMAGES = {
+  piramide:  "fuego/piramide.jpg",
+  chimenea:  "fuego/chimenea.jpg",
+  minion:    "fuego/minion.jpg",
+  "leña":    "fuego/leña.jpg",
+  infalible: "fuego/infalible.jpg",
+};
+
 // ── MÉTODOS DE FUEGO ─────────────────────────────────────────────────────────
 export const METODOS_FUEGO = [
   {
