@@ -1654,15 +1654,15 @@ function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParril
           )}
         </div>
         <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} isCompleto={isCompleto} isPremium={isPremium} onGoPremium={onGoPremium} />
-        {step === "done" && (
-          <div style={{ padding:"8px 13px 24px" }}>
-            <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
-              {t(idioma,"listo_btn")}
-            </button>
-          </div>
-        )}
-        <div style={{ height:16 }} />
+        <div style={{ height: step === "done" ? 88 : 16 }} />
       </div>
+      {step === "done" && (
+        <div style={{ flexShrink:0, padding:"8px 13px 24px", background:"linear-gradient(0deg,#0d0a07 65%,transparent)" }}>
+          <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
+            {t(idioma,"listo_btn")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2102,6 +2102,7 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
   const [fotoAnalisisLoading, setFotoAnalisisLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [aiConsejo, setAiConsejo] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [ajustesNuevos, setAjustesNuevos] = useState(null);
@@ -2164,9 +2165,11 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
   };
 
   const guardar = async () => {
-    if (!rating || saved) return;
+    if (!rating || saved || saving) return;
+    setSaving(true);
     const asado = { ...pendingAsado, rating, nota, foto };
     const result = saveAsado ? await saveAsado(asado) : (persist(prev => ({ ...prev, asados:[...prev.asados, asado] })), {});
+    setSaving(false);
     if (rating === "perfecto") setShowConfetti(true);
     setSaved(true);
     const fotoUrl = result?.fotoUrl;
@@ -2314,8 +2317,13 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
             </div>
           </div>
         )}
-        <button onClick={guardar} disabled={!rating || saved} style={{ width:"100%", padding:15, background:rating?"linear-gradient(135deg,#c1440e,#8B2500)":"#1a1005", border:`1px solid ${rating?"#c1440e":"#2a1a0a"}`, borderRadius:14, color:rating?"white":"#555", fontSize:15, fontWeight:700, cursor:rating?"pointer":"not-allowed", marginBottom:10, transition:"all .3s", animation:rating&&!saved?"pulseBtn 2s ease-in-out infinite":"none" }}>
-          {saved ? t(idioma,"guardado_asado") : t(idioma,"guardar_asado")}
+        <button onClick={guardar} disabled={!rating || saved || saving} style={{ width:"100%", padding:15, background:rating?"linear-gradient(135deg,#c1440e,#8B2500)":"#1a1005", border:`1px solid ${rating?"#c1440e":"#2a1a0a"}`, borderRadius:14, color:rating?"white":"#555", fontSize:15, fontWeight:700, cursor:rating&&!saving?"pointer":"not-allowed", marginBottom:10, transition:"all .3s", animation:rating&&!saved&&!saving?"pulseBtn 2s ease-in-out infinite":"none", opacity:saving?0.75:1 }}>
+          {saved ? t(idioma,"guardado_asado") : saving ? (
+            <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+              {[0,1,2].map(i => <span key={i} style={{ width:6, height:6, borderRadius:"50%", background:"white", display:"inline-block", animation:`bounce ${0.5+i*0.15}s ease-in-out infinite alternate` }} />)}
+              <span>{idioma==="en" ? "Saving…" : "Guardando…"}</span>
+            </span>
+          ) : t(idioma,"guardar_asado")}
         </button>
         <button onClick={() => { setPendingAsado(null); go("home"); }} style={{ width:"100%", padding:12, background:"none", border:"none", color:"#555", fontSize:13, cursor:"pointer" }}>{t(idioma,"saltear")}</button>
       </div>
