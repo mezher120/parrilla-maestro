@@ -1636,30 +1636,33 @@ function SimGrilling({ selected, mins, secs, progress, currentAltura, tipoParril
         </div>
         <div style={{ textAlign:"center", fontSize:14, marginTop:5, opacity:step==="done"?.2:1, animation:"fireFlicker .9s ease infinite" }}>🔥🔥🔥</div>
       </div>
-      <div style={{ flex:1, overflowY:"auto", padding:"9px 13px" }}>
-        <div style={{ color:"#3a2a1a", fontSize:10, letterSpacing:1, marginBottom:5, textTransform:"uppercase" }}>{t(idioma,"alertas")}</div>
-        {notifs.length === 0 ? (
-          <div style={{ color:"#2a2010", fontSize:13, textAlign:"center", padding:"16px 0" }}>{t(idioma,"alertas_empty")}</div>
-        ) : (
-          notifs.map((n, i) => (
-            <div key={n.id} style={{ display:"flex", gap:8, padding:"8px 10px", background:"#12100a", borderRadius:10, marginBottom:5, border:`1px solid ${n.color||"#2a1a0a"}22`, opacity:Math.max(.35, 1-i*.07) }}>
-              <span style={{ fontSize:14 }}>{n.emoji}</span>
-              <div>
-                <div style={{ color:n.color||"#ff8c42", fontSize:10, fontWeight:700 }}>min {n.time} · {n.label}</div>
-                <div style={{ color:"#6b5a3e", fontSize:11, marginTop:1, lineHeight:1.4 }}>{n.msg}</div>
+      <div style={{ flex:1, overflowY:"auto" }}>
+        <div style={{ padding:"9px 13px 4px" }}>
+          <div style={{ color:"#3a2a1a", fontSize:10, letterSpacing:1, marginBottom:5, textTransform:"uppercase" }}>{t(idioma,"alertas")}</div>
+          {notifs.length === 0 ? (
+            <div style={{ color:"#2a2010", fontSize:13, textAlign:"center", padding:"16px 0" }}>{t(idioma,"alertas_empty")}</div>
+          ) : (
+            notifs.map((n, i) => (
+              <div key={n.id} style={{ display:"flex", gap:8, padding:"8px 10px", background:"#12100a", borderRadius:10, marginBottom:5, border:`1px solid ${n.color||"#2a1a0a"}22`, opacity:Math.max(.35, 1-i*.07) }}>
+                <span style={{ fontSize:14 }}>{n.emoji}</span>
+                <div>
+                  <div style={{ color:n.color||"#ff8c42", fontSize:10, fontWeight:700 }}>min {n.time} · {n.label}</div>
+                  <div style={{ color:"#6b5a3e", fontSize:11, marginTop:1, lineHeight:1.4 }}>{n.msg}</div>
+                </div>
               </div>
-            </div>
-          ))
-        )}
-      </div>
-      <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} isCompleto={isCompleto} isPremium={isPremium} onGoPremium={onGoPremium} />
-      {step === "done" && (
-        <div style={{ padding:"8px 13px 24px", flexShrink:0 }}>
-          <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
-            {t(idioma,"listo_btn")}
-          </button>
+            ))
+          )}
         </div>
-      )}
+        <CameraAnalysis cortes={selected.map(c => c.nombre)} idioma={idioma} isCompleto={isCompleto} isPremium={isPremium} onGoPremium={onGoPremium} />
+        {step === "done" && (
+          <div style={{ padding:"8px 13px 24px" }}>
+            <button onClick={onDone} style={{ width:"100%", padding:15, background:"linear-gradient(135deg,#4caf50,#2e7d32)", border:"none", borderRadius:14, color:"white", fontSize:15, fontWeight:700, cursor:"pointer", animation:"pulseBtn 2s ease-in-out infinite" }}>
+              {t(idioma,"listo_btn")}
+            </button>
+          </div>
+        )}
+        <div style={{ height:16 }} />
+      </div>
     </div>
   );
 }
