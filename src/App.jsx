@@ -105,7 +105,7 @@ const T = {
     tipo_parrilla:"📏 Tipo de parrilla", graduable:"Graduable", fija:"Fija",
     ajusto_altura:"Ajusto la altura", una_altura:"Una sola altura",
     fuego_listo:"¿Está el fuego listo?", carbon_gris:"El carbón debe estar completamente blanco-grisáceo",
-    carbon_txt:"Sin llamas visibles. Si ves llama directa, esperá unos minutos más.",
+    carbon_txt:"Sin llamas visibles. Si ves llama directa, esperá unos minutos más. Importante: Tener backup constante para ir agregando",
     recordar:"📋 Recordá antes de empezar",
     tip_sal:"✅ Sal gruesa sobre los cortes",
     tip_temp:"✅ Carne a temperatura ambiente (30 min fuera del frío)",
@@ -375,6 +375,15 @@ function getWeekId() {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
+function getPrevWeekId() {
+  const now = new Date();
+  now.setDate(now.getDate() - 7);
+  const year = now.getFullYear();
+  const start = new Date(year, 0, 1);
+  const week = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
 function timeAgo(ts, idioma = 'es') {
   const diff = Math.floor((Date.now() - ts) / 1000);
   if (diff < 60) return idioma === 'en' ? 'just now' : 'ahora';
@@ -405,6 +414,49 @@ async function fbCreatePost(uid, userData, asadoData, fotoUrl) {
     const docRef = await addDoc(collection(db, "posts"), post);
     return docRef.id;
   } catch(e) { console.error("createPost:", e); return null; }
+}
+
+async function fbGetHOF() {
+  try {
+    const snap = await getDocs(query(collection(db, 'hof_entries'), limit(30)));
+    const entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return entries
+      .sort((a, b) =>
+        ((b.oros||0)*3 + (b.platas||0)*2 + (b.cobres||0)) -
+        ((a.oros||0)*3 + (a.platas||0)*2 + (a.cobres||0))
+      )
+      .slice(0, 10);
+  } catch(e) { console.error("getHOF:", e); return []; }
+}
+
+async function fbTallyWeekHOF(weekId) {
+  try {
+    if (weekId === getWeekId()) return;
+    const tallyRef = doc(db, 'hof_tallied', weekId);
+    if ((await getDoc(tallyRef)).exists()) return;
+    await setDoc(tallyRef, { ts: Date.now() }); // lock first to avoid race
+    const snap = await getDocs(query(collection(db, 'posts'), where('semana', '==', weekId), limit(100)));
+    if (snap.empty) return;
+    const NIVEL_NAMES = ["Encendedor","Fogonero","Parrillero","Maestro","Gran Maestro","Leyenda"];
+    const top3 = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(p => (p.llamasCount||0) > 0)
+      .sort((a, b) => (b.llamasCount||0) - (a.llamasCount||0))
+      .slice(0, 3);
+    const medals = ['oros', 'platas', 'cobres'];
+    for (let i = 0; i < top3.length; i++) {
+      const p = top3[i];
+      await setDoc(doc(db, 'hof_entries', p.userId), {
+        nombre: p.userNombre || 'Parrillero',
+        avatar: p.userEmoji  || '🧑‍🍳',
+        ciudad: p.userCiudad || '',
+        nivel:  NIVEL_NAMES[Math.min((p.userNivel||1) - 1, NIVEL_NAMES.length - 1)],
+        [medals[i]]: increment(1),
+        uid: p.userId,
+        lastUpdated: Date.now(),
+      }, { merge: true });
+    }
+  } catch(e) { console.error("tallyWeekHOF:", e); }
 }
 
 async function fbGetPosts(tab, ciudad, weekId) {
@@ -1136,7 +1188,7 @@ function Calculadora({ go, store, idioma="es" }) {
   const [achuras, setAchuras] = useState(false);
 
   // Carnes fijas: 500g por persona dividido en 3 cortes
-  // Asado de tira/vacío 50%, Bondiola de cerdo 25%, Entraña/cuadril 25%
+  // Asado de tira/vacío 50%, Bondiola de cerdo 25%, Entraña 25%
   const carneG = comensales * 500;
   // Achuras: chorizos (1 por persona ~100g) + otras achuras (100g por persona)
   const chorizosUnid = achuras ? comensales : 0;
@@ -1165,7 +1217,7 @@ function Calculadora({ go, store, idioma="es" }) {
   const cortesCarne = [
     { label:"Asado de tira / Vacío", pct:0.50, color:"#8B1A1A", emoji:"🥩", g: Math.round(carneG * 0.50) },
     { label:"Bondiola de cerdo",     pct:0.25, color:"#D4A017", emoji:"🐷", g: Math.round(carneG * 0.25) },
-    { label:"Entraña / Cuadril",     pct:0.25, color:"#BB3E03", emoji:"🥩", g: Math.round(carneG * 0.25) },
+    { label:"Entraña",               pct:0.25, color:"#9B2226", emoji:"🥩", g: Math.round(carneG * 0.25) },
   ];
 
   return (
@@ -1337,7 +1389,7 @@ function SimModeSelect({ setMode, setStep, idioma="es", aprendizaje={}, tipoParr
 
 function SimSelectCortes({ selected, toggleSel, coccion, setStep, idioma="es", aprendizaje={}, tipoParrilla="adjustable", isPremium=false, onGoPremium }) {
   const grupos = [
-    { label: idioma==="en" ? "🐄 Beef" : "🐄 Vacuno", ids: ["asado-tira","vacio","entraña","lomo","cuadril","matambre","bife-chorizo","ojo-bife","tapa-asado","colita-cuadril"] },
+    { label: idioma==="en" ? "🐄 Beef" : "🐄 Vacuno", ids: ["asado-tira","asado-tira-ancha","vacio","entraña","lomo","matambre","bife-chorizo","ojo-bife","tapa-asado","colita-cuadril"] },
     { label: idioma==="en" ? "🐷 Pork" : "🐷 Cerdo",  ids: ["bondiola","costillas-cerdo","lomo-cerdo","matambre-cerdo","pechito-cerdo"] },
     { label: idioma==="en" ? "🫀 Offal" : "🫀 Achuras", ids: ["chorizos","morcilla","mollejas","chinchulines","riñon","provoleta"] },
     { label: idioma==="en" ? "⭐ VIP Premium" : "⭐ VIP Premium", ids: ["lechon","pollo","cordero","picanha"] },
@@ -1509,16 +1561,18 @@ function SimPlaceCortes({ selected, coccion, tipoParrilla, startGrilling, idioma
   );
 }
 
-function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, setTipoParrilla, startGrilling, idioma="es", aprendizaje={} }) {
+function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, setTipoParrilla, startGrilling, idioma="es", aprendizaje={}, isPremium=false, onGoPremium }) {
+  const byId = Object.fromEntries(SIMULACION_CORTES.map(c=>[c.id,c]));
+  const grupos = [
+    { label:"🐄", ids:["asado-tira","asado-tira-ancha","vacio","entraña","lomo","matambre","bife-chorizo","ojo-bife","tapa-asado","colita-cuadril"] },
+    { label:"🐷", ids:["bondiola","costillas-cerdo","lomo-cerdo","matambre-cerdo","pechito-cerdo"] },
+    { label:"🫀", ids:["chorizos","morcilla","mollejas","chinchulines","riñon","provoleta"] },
+    { label:"⭐", ids:["lechon","pollo","cordero","picanha"] },
+  ];
   return (
     <div style={{ flex:1, overflowY:"auto", padding:14 }}>
       <div style={{ color:"#ff8c42", fontSize:13, fontWeight:700, marginBottom:10 }}>⚡ {idioma==="en" ? "Cuts" : "Cortes"}</div>
-      {[
-        { label:"🐄", ids:["asado-tira","vacio","entraña","lomo","cuadril","matambre","bife-chorizo","ojo-bife","tapa-asado","colita-cuadril"] },
-        { label:"🐷", ids:["bondiola","costillas-cerdo","lomo-cerdo","matambre-cerdo","pechito-cerdo"] },
-        { label:"🫀", ids:["chorizos","morcilla","mollejas","chinchulines","riñon","provoleta"] },
-      ].map(grupo => {
-        const byId = Object.fromEntries(SIMULACION_CORTES.map(c=>[c.id,c]));
+      {grupos.map(grupo => {
         return (
           <div key={grupo.label} style={{ marginBottom:10 }}>
             <div style={{ color:"#555", fontSize:10, marginBottom:5 }}>{grupo.label}</div>
@@ -1526,10 +1580,18 @@ function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, se
               {grupo.ids.map(id => {
                 const c = byId[id]; if (!c) return null;
                 const isSel = !!selected.find(x=>x.id===c.id);
+                if (c.vip && !isPremium) return (
+                  <button key={c.id} onClick={() => onGoPremium?.()} style={{ padding:"6px 10px", display:"flex", alignItems:"center", gap:4, background:"#1a1200", border:"2px solid #ffd70033", borderRadius:20, cursor:"pointer", opacity:.6 }}>
+                    <span style={{ fontSize:14 }}>{c.emoji}</span>
+                    <span style={{ color:"#6b5a3e", fontSize:10, fontWeight:600 }}>{c.nombre.split(" ")[0]}</span>
+                    <span style={{ fontSize:10 }}>🔒</span>
+                  </button>
+                );
                 return (
                   <button key={c.id} onClick={()=>toggleSel(c)} style={{ padding:"6px 10px", display:"flex", alignItems:"center", gap:4, background:isSel?`${c.color}33`:"#1a1005", border:`2px solid ${isSel?c.color:"#2a1a0a"}`, borderRadius:20, cursor:"pointer", transition:"all .2s" }}>
                     <span style={{ fontSize:14 }}>{c.emoji}</span>
                     <span style={{ color:isSel?"#f0e6d3":"#555", fontSize:10, fontWeight:600 }}>{c.nombre.split(" ")[0]}</span>
+                    {c.vip && <span style={{ fontSize:9 }}>⭐</span>}
                   </button>
                 );
               })}
@@ -1910,7 +1972,7 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
       {step === "config"        && <SimConfig idioma={idioma} coccion={coccion} setCoccion={setCoccion} tipoParrilla={tipoParrilla} setTipoParrilla={setTipoParrilla} setStep={setStep} />}
       {step === "fireCheck"     && <SimFireCheck idioma={idioma} tipoParrilla={tipoParrilla} setStep={setStep} />}
       {step === "placeCortes"   && <SimPlaceCortes idioma={idioma} selected={selected} coccion={coccion} tipoParrilla={tipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} />}
-      {step === "fireCheckPro"  && <SimProFlow idioma={idioma} selected={selected} toggleSel={toggleSel} coccion={coccion} setCoccion={setCoccion} tipoParrilla={tipoParrilla} setTipoParrilla={setTipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} />}
+      {step === "fireCheckPro"  && <SimProFlow idioma={idioma} selected={selected} toggleSel={toggleSel} coccion={coccion} setCoccion={setCoccion} tipoParrilla={tipoParrilla} setTipoParrilla={setTipoParrilla} startGrilling={startGrilling} aprendizaje={aprendizaje} isPremium={store.config?.premium||store.config?.completo||false} onGoPremium={() => { resetSim(); go("premium"); }} />}
       {(step === "grilling" || step === "done") && <SimGrilling idioma={idioma} selected={selected} mins={mins} secs={secs} progress={progress} currentAltura={currentAltura} tipoParrilla={tipoParrilla} coccion={coccion} activeNotif={activeNotif} notifs={notifs} step={step} onDone={handleDone} onReset={resetSim} vozActiva={vozActiva} setVozActiva={setVozActiva} aprendizaje={aprendizaje} tiempoMultGlobal={tiempoMult} isCompleto={store.config?.completo||false} isPremium={store.config?.premium===true} onGoPremium={() => go("premium")} />}
     </div>
   );
@@ -3154,6 +3216,8 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [commentPost, setCommentPost] = useState(null);
+  const [hofEntries, setHofEntries] = useState([]);
+  const [hofLoading, setHofLoading] = useState(false);
   const week = getWeekId();
   const ciudad = store.user?.ciudad || '';
 
@@ -3164,7 +3228,18 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadPosts(); }, [tab]);
+  const loadHOF = async () => {
+    setHofLoading(true);
+    await fbTallyWeekHOF(getPrevWeekId());
+    const data = await fbGetHOF();
+    setHofEntries(data);
+    setHofLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab === 'hof') loadHOF();
+    else loadPosts();
+  }, [tab]);
 
   const handleVote = async (postId, hasVoted) => {
     if (!authUser) return;
@@ -3175,19 +3250,6 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
       llamasCount: (p.llamasCount || 0) + (hasVoted ? -1 : 1),
     } : p));
   };
-
-  const HALL_OF_FAME_EJEMPLO = [
-    { nombre:"El Colo",   emoji:"🧑‍🍳", ciudad:"Buenos Aires", nivel:"Leyenda",      oros:12, platas:8,  cobres:5 },
-    { nombre:"La Bochi",  emoji:"👩‍🍳", ciudad:"Córdoba",      nivel:"Gran Maestro", oros:9,  platas:11, cobres:6 },
-    { nombre:"Hernán",    emoji:"🤠",   ciudad:"Rosario",      nivel:"Gran Maestro", oros:8,  platas:6,  cobres:9 },
-    { nombre:"El Turco",  emoji:"😎",   ciudad:"Mendoza",      nivel:"Maestro",      oros:6,  platas:9,  cobres:7 },
-    { nombre:"Nadia",     emoji:"👩‍🍳", ciudad:"Buenos Aires", nivel:"Maestro",      oros:5,  platas:7,  cobres:11 },
-    { nombre:"Pipe",      emoji:"🔥",   ciudad:"Mar del Plata",nivel:"Parrillero",   oros:4,  platas:5,  cobres:8 },
-    { nombre:"El Gordo",  emoji:"🐂",   ciudad:"Tucumán",      nivel:"Parrillero",   oros:3,  platas:6,  cobres:5 },
-    { nombre:"Caro",      emoji:"⚡",   ciudad:"Salta",        nivel:"Parrillero",   oros:2,  platas:4,  cobres:7 },
-    { nombre:"Mati",      emoji:"🧑‍🍳", ciudad:"La Plata",     nivel:"Fogonero",     oros:1,  platas:3,  cobres:6 },
-    { nombre:"Sol",       emoji:"👩‍🍳", ciudad:"Neuquén",      nivel:"Fogonero",     oros:1,  platas:2,  cobres:4 },
-  ];
 
   const tabs = [
     { id:'semana', label:t(idioma,"ranking_tab_semana") },
@@ -3221,15 +3283,32 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
           <div>
             <div style={{ textAlign:"center", padding:"12px 0 16px" }}>
               <div style={{ fontSize:36, marginBottom:4 }}>👑</div>
-              <div style={{ color:"#ffd700", fontSize:15, fontWeight:900, fontFamily:"'Playfair Display',serif" }}>{idioma==="en" ? "Hall of Fame" : "Hall of Fame"}</div>
-              <div style={{ color:"#6b5a3e", fontSize:11, marginTop:3 }}>{idioma==="en" ? "All-time top 10" : "Top 10 de todos los tiempos"}</div>
+              <div style={{ color:"#ffd700", fontSize:15, fontWeight:900, fontFamily:"'Playfair Display',serif" }}>Hall of Fame</div>
+              <div style={{ color:"#6b5a3e", fontSize:11, marginTop:3 }}>{idioma==="en" ? "All-time top 10 · updated weekly" : "Top 10 de todos los tiempos · se actualiza cada semana"}</div>
             </div>
-            {HALL_OF_FAME_EJEMPLO.map((p, idx) => {
+            {hofLoading ? (
+              <div style={{ textAlign:"center", padding:40 }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>👑</div>
+                <div style={{ color:"#555", fontSize:13 }}>{idioma==="en" ? "Loading..." : "Cargando..."}</div>
+              </div>
+            ) : hofEntries.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"32px 24px" }}>
+                <div style={{ fontSize:48, marginBottom:12 }}>🏆</div>
+                <div style={{ color:"#ff8c42", fontSize:15, fontWeight:700, marginBottom:8 }}>
+                  {idioma==="en" ? "No legends yet" : "Aún no hay leyendas"}
+                </div>
+                <div style={{ color:"#555", fontSize:13, lineHeight:1.6 }}>
+                  {idioma==="en"
+                    ? "Win a weekly ranking to earn your first medal 🥇"
+                    : "Ganate el ranking semanal para conseguir tu primera medalla 🥇"}
+                </div>
+              </div>
+            ) : hofEntries.map((p, idx) => {
               const posEmoji = idx===0?"👑":idx===1?"🥈":idx===2?"🥉":null;
               const borderColor = idx===0?"#ffd700":idx===1?"#c0c0c0":idx===2?"#cd7f32":"#2a1a0a";
               const bg = idx===0?"#1a1005":idx===1?"#111318":idx===2?"#140f09":"#1a1005";
               return (
-                <div key={p.nombre} style={{ background:bg, borderRadius:14, border:`1.5px solid ${borderColor}`, padding:"13px 14px", marginBottom:9, animation:"slideUp .4s ease both", animationDelay:`${idx*0.06}s`, opacity:0, animationFillMode:"forwards" }}>
+                <div key={p.uid||p.id} style={{ background:bg, borderRadius:14, border:`1.5px solid ${borderColor}`, padding:"13px 14px", marginBottom:9, animation:"slideUp .4s ease both", animationDelay:`${idx*0.06}s`, opacity:0, animationFillMode:"forwards" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:11 }}>
                     <div style={{ minWidth:34, textAlign:"center" }}>
                       {posEmoji
@@ -3237,16 +3316,19 @@ function Ranking({ store, persist, go, idioma="es", authUser }) {
                         : <span style={{ color:"#555", fontSize:15, fontWeight:700 }}>#{idx+1}</span>
                       }
                     </div>
-                    <span style={{ fontSize:30 }}>{p.emoji}</span>
+                    <span style={{ fontSize:30 }}>{p.avatar}</span>
                     <div style={{ flex:1 }}>
                       <div style={{ color:"#f0e6d3", fontSize:14, fontWeight:700, lineHeight:1.2 }}>{p.nombre}</div>
-                      <div style={{ color:"#6b5a3e", fontSize:11, marginTop:2 }}>{p.ciudad} · {p.nivel}</div>
+                      <div style={{ color:"#6b5a3e", fontSize:11, marginTop:2 }}>{p.ciudad}{p.ciudad && p.nivel ? " · " : ""}{p.nivel}</div>
+                    </div>
+                    <div style={{ color:"#555", fontSize:11, fontWeight:700 }}>
+                      {(p.oros||0)*3 + (p.platas||0)*2 + (p.cobres||0)} pts
                     </div>
                   </div>
                   <div style={{ display:"flex", gap:12, marginTop:10, paddingTop:9, borderTop:`1px solid ${borderColor}33` }}>
-                    <span style={{ color:"#ffd700", fontSize:12, fontWeight:700 }}>🥇 {p.oros}</span>
-                    <span style={{ color:"#c0c0c0", fontSize:12, fontWeight:700 }}>🥈 {p.platas}</span>
-                    <span style={{ color:"#cd7f32", fontSize:12, fontWeight:700 }}>🥉 {p.cobres}</span>
+                    <span style={{ color:"#ffd700", fontSize:12, fontWeight:700 }}>🥇 {p.oros||0}</span>
+                    <span style={{ color:"#c0c0c0", fontSize:12, fontWeight:700 }}>🥈 {p.platas||0}</span>
+                    <span style={{ color:"#cd7f32", fontSize:12, fontWeight:700 }}>🥉 {p.cobres||0}</span>
                   </div>
                 </div>
               );
