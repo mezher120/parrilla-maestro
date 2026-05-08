@@ -1,6 +1,6 @@
 {
-  "name": "Parrilla Maestro",
-  "short_name": "Parrilla",
+  "name": "Modo Asado",
+  "short_name": "Modo Asado",
   "description": "El asistente definitivo del parrillero argentino",
   "start_url": "/",
   "display": "standalone",

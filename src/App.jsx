@@ -621,7 +621,7 @@ function LoadingScreen() {
   return (
     <div style={{ flex:1, background:"#0d0a07", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20 }}>
       <div style={{ fontSize:60, animation:"fireFlicker 1s ease infinite", filter:"drop-shadow(0 0 20px #ff4500)" }}>🔥</div>
-      <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:22, fontWeight:900 }}>PARRILLA MAESTRO</div>
+      <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:22, fontWeight:900 }}>MODO ASADO</div>
       <div style={{ display:"flex", gap:8 }}>
         {[0,1,2].map(i => <div key={i} style={{ width:8, height:8, borderRadius:"50%", background:"#ff8c42", animation:`bounce ${0.6+i*0.15}s ease-in-out infinite alternate`, opacity:0.6 }} />)}
       </div>
@@ -672,7 +672,7 @@ function LoginScreen({ go, idioma="es" }) {
       <div style={{ flex:1, overflowY:"auto", padding:"60px 26px 32px" }}>
         <div style={{ textAlign:"center", marginBottom:32 }}>
           <div style={{ fontSize:56, animation:"fireFlicker 1s ease infinite", filter:"drop-shadow(0 0 18px #ff4500)", marginBottom:10 }}>🔥</div>
-          <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:28, fontWeight:900, animation:"glow 2s ease-in-out infinite" }}>PARRILLA MAESTRO</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", color:"#ff8c42", fontSize:28, fontWeight:900, animation:"glow 2s ease-in-out infinite" }}>MODO ASADO</div>
           <div style={{ color:"#8b7355", fontSize:12, letterSpacing:4, textTransform:"uppercase", marginTop:4 }}>El arte del fuego</div>
         </div>
         <div style={{ display:"flex", background:"#1a1005", borderRadius:14, padding:4, marginBottom:24, border:"1px solid #2a1a0a" }}>
@@ -727,7 +727,7 @@ function Splash() {
       ))}
       <div style={{ fontSize:90, lineHeight:1, animation:"flicker .8s ease-in-out infinite", opacity:p>=1?1:0, transition:"opacity .8s", filter:"drop-shadow(0 0 30px #ff6a00)", marginBottom:14 }}>🔥</div>
       <div style={{ opacity:p>=2?1:0, transition:"opacity .8s", textAlign:"center" }}>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:50, fontWeight:900, color:"#ff8c42", animation:"glow 2s ease-in-out infinite", lineHeight:1 }}>PARRILLA</div>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:50, fontWeight:900, color:"#ff8c42", animation:"glow 2s ease-in-out infinite", lineHeight:1 }}>MODO ASADO</div>
         <div style={{ fontSize:14, letterSpacing:9, color:"#d4a373", textTransform:"uppercase", marginTop:4 }}>MAESTRO</div>
       </div>
       <div style={{ marginTop:44, opacity:p>=3?1:0, transition:"opacity .8s", fontSize:12, color:"#8b6914", letterSpacing:3, textTransform:"uppercase" }}>El arte del fuego</div>
@@ -2780,18 +2780,46 @@ function PremiumScreen({ store, persist, go, idioma="es" }) {
   const isCompleto = store.config?.completo;
   const en = idioma === "en";
 
+  const isNative = !!(window.ReactNativeWebView);
+
   const activatePremium = () => {
-    persist(prev => ({ ...prev, config:{ ...prev.config, premium:true } }));
+    if (isNative) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'BUY_PLAN', plan: 'premium' }));
+    } else {
+      persist(prev => ({ ...prev, config:{ ...prev.config, premium:true } }));
+    }
   };
   const activateCompleto = () => {
-    persist(prev => ({ ...prev, config:{ ...prev.config, premium:true, completo:true } }));
+    if (isNative) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'BUY_PLAN', plan: 'completo' }));
+    } else {
+      persist(prev => ({ ...prev, config:{ ...prev.config, premium:true, completo:true } }));
+    }
   };
+
+  // Escucha respuestas del nativo (compra exitosa)
+  React.useEffect(() => {
+    if (!isNative) return;
+    const handler = (e) => {
+      const { type, plan } = e.detail || {};
+      if (type === 'PURCHASE_SUCCESS') {
+        if (plan === 'completo') {
+          persist(prev => ({ ...prev, config:{ ...prev.config, premium:true, completo:true } }));
+        } else if (plan === 'premium') {
+          persist(prev => ({ ...prev, config:{ ...prev.config, premium:true } }));
+        }
+      }
+    };
+    window.addEventListener('native_message', handler);
+    return () => window.removeEventListener('native_message', handler);
+  }, [isNative]);
 
   const premiumFeatures = [
     ["🥩", en?"VIP Cuts":"Cortes VIP", en?"Picanha, Lechón, Cordero, T-Bone and more in simulation":"Picanha, Lechón, Cordero, T-Bone y más en la simulación"],
     ["🧠", en?"AI Learning":"IA Aprendizaje", en?"Personalized time adjustments from your BBQ history":"Ajustes de tiempo personalizados según tu historial"],
     ["😄", en?"BBQ Jokes":"Chistes asadores", en?"50+ exclusive jokes during the simulation":"50+ chistes exclusivos durante la simulación"],
     ["☁️", en?"Cloud Sync":"Sync en la nube", en?"Your history on all devices (coming soon)":"Tu historial en todos tus dispositivos (próximamente)"],
+    ["📴", en?"Offline Mode":"Modo Offline", en?"Use the app without internet connection (mobile app)":"Usá la app sin conexión a internet (app móvil)"],
   ];
   const completoFeatures = [
     ["✨", en?"Claude AI Photo Analysis":"Análisis de Foto con Claude IA", en?"Get expert AI feedback on your BBQ photos":"Análisis experto de IA sobre las fotos de tu asado"],
@@ -2861,9 +2889,11 @@ function PremiumScreen({ store, persist, go, idioma="es" }) {
               💎 {en?"Upgrade to Completo":"Actualizar a Completo"}
             </button>
           </div>
-          <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
-            {en?"Demo mode: tap to simulate purchase.":"Modo demo: tocá para simular la compra."}
-          </div>
+          {!isNative && (
+            <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
+              {en?"Demo mode: tap to simulate purchase.":"Modo demo: tocá para simular la compra."}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2941,9 +2971,11 @@ function PremiumScreen({ store, persist, go, idioma="es" }) {
           </button>
         </div>
 
-        <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
-          {en?"Demo mode: tap to simulate purchase. Real payments coming soon.":"Modo demo: tocá para simular la compra. Pagos reales próximamente."}
-        </div>
+        {!isNative && (
+          <div style={{ color:"#3a2a1a", fontSize:11, textAlign:"center", lineHeight:1.6 }}>
+            {en?"Demo mode: tap to simulate purchase.":"Modo demo: tocá para simular la compra."}
+          </div>
+        )}
       </div>
     </div>
   );
