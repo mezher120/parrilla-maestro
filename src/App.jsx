@@ -2798,7 +2798,7 @@ function PremiumScreen({ store, persist, go, idioma="es" }) {
   };
 
   // Escucha respuestas del nativo (compra exitosa)
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isNative) return;
     const handler = (e) => {
       const { type, plan } = e.detail || {};
@@ -2819,11 +2819,11 @@ function PremiumScreen({ store, persist, go, idioma="es" }) {
     ["🧠", en?"AI Learning":"IA Aprendizaje", en?"Personalized time adjustments from your BBQ history":"Ajustes de tiempo personalizados según tu historial"],
     ["😄", en?"BBQ Jokes":"Chistes asadores", en?"50+ exclusive jokes during the simulation":"50+ chistes exclusivos durante la simulación"],
     ["☁️", en?"Cloud Sync":"Sync en la nube", en?"Your history on all devices (coming soon)":"Tu historial en todos tus dispositivos (próximamente)"],
-    ["📴", en?"Offline Mode":"Modo Offline", en?"Use the app without internet connection (mobile app)":"Usá la app sin conexión a internet (app móvil)"],
   ];
   const completoFeatures = [
-    ["✨", en?"Claude AI Photo Analysis":"Análisis de Foto con Claude IA", en?"Get expert AI feedback on your BBQ photos":"Análisis experto de IA sobre las fotos de tu asado"],
     ["🔮", en?"Everything in Premium":"Todo lo de Premium", en?"All Premium features included":"Todas las funciones Premium incluidas"],
+    ["✨", en?"Claude AI Photo Analysis":"Análisis de Foto con Claude IA", en?"Get expert AI feedback on your BBQ photos":"Análisis experto de IA sobre las fotos de tu asado"],
+    ["📴", en?"Offline Mode":"Modo Offline", en?"Use the app without internet connection (mobile app)":"Usá la app sin conexión a internet (app móvil)"],
   ];
 
   if (isCompleto) {
@@ -2957,7 +2957,7 @@ function PremiumScreen({ store, persist, go, idioma="es" }) {
               <div style={{ color:"#6b5a8e", fontSize:10 }}>{en?"/ mo":"/ mes"}</div>
             </div>
           </div>
-          {[...premiumFeatures, ...completoFeatures].map(([em, title, desc]) => (
+          {completoFeatures.map(([em, title, desc]) => (
             <div key={title} style={{ display:"flex", gap:10, marginBottom:10 }}>
               <div style={{ width:32, height:32, background:"#7c3aed22", borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>{em}</div>
               <div>
