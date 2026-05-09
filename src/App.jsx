@@ -1580,17 +1580,20 @@ function SimProFlow({ selected, toggleSel, coccion, setCoccion, tipoParrilla, se
               {grupo.ids.map(id => {
                 const c = byId[id]; if (!c) return null;
                 const isSel = !!selected.find(x=>x.id===c.id);
+                const cutLabel = c.shortLabel
+                  ? c.shortLabel.split("\n").map((l,i) => <span key={i} style={{ display:"block", lineHeight:1.2 }}>{l}</span>)
+                  : c.nombre.split(" ")[0];
                 if (c.vip && !isPremium) return (
                   <button key={c.id} onClick={() => onGoPremium?.()} style={{ padding:"6px 10px", display:"flex", alignItems:"center", gap:4, background:"#1a1200", border:"2px solid #ffd70033", borderRadius:20, cursor:"pointer", opacity:.6 }}>
                     <span style={{ fontSize:14 }}>{c.emoji}</span>
-                    <span style={{ color:"#6b5a3e", fontSize:10, fontWeight:600 }}>{c.nombre.split(" ")[0]}</span>
+                    <span style={{ color:"#6b5a3e", fontSize:10, fontWeight:600, textAlign:"center" }}>{cutLabel}</span>
                     <span style={{ fontSize:10 }}>🔒</span>
                   </button>
                 );
                 return (
                   <button key={c.id} onClick={()=>toggleSel(c)} style={{ padding:"6px 10px", display:"flex", alignItems:"center", gap:4, background:isSel?`${c.color}33`:"#1a1005", border:`2px solid ${isSel?c.color:"#2a1a0a"}`, borderRadius:20, cursor:"pointer", transition:"all .2s" }}>
                     <span style={{ fontSize:14 }}>{c.emoji}</span>
-                    <span style={{ color:isSel?"#f0e6d3":"#555", fontSize:10, fontWeight:600 }}>{c.nombre.split(" ")[0]}</span>
+                    <span style={{ color:isSel?"#f0e6d3":"#555", fontSize:10, fontWeight:600, textAlign:"center" }}>{cutLabel}</span>
                     {c.vip && <span style={{ fontSize:9 }}>⭐</span>}
                   </button>
                 );

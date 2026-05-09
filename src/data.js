@@ -459,7 +459,7 @@ export const METODOS_FUEGO = [
 export const SIMULACION_CORTES = [
   // ── VACUNO ──────────────────────────────────────────────────────────────────
   {
-    id: "asado-tira", nombre: "Asado de Tira 3-4cm", emoji: "🥩", color: "#8B1A1A", tiempo: 70,
+    id: "asado-tira", nombre: "Asado de Tira 3-4cm", shortLabel: "Tira\n3-4cm", emoji: "🥩", color: "#8B1A1A", tiempo: 70,
     eventos: [
       { min: 0,  msg: "Colocar con el hueso hacia abajo. Fuego medio-alto.",       msg_en: "Place bone side down. Medium-high heat." },
       { min: 15, msg: "Bajar la grilla 10 cm. El hueso debe estar dorándose.",     msg_en: "Lower grill 10 cm. Bone should be browning." },
@@ -471,7 +471,7 @@ export const SIMULACION_CORTES = [
     ],
   },
     {
-    id: "asado-tira-ancha", nombre: "Asado de Tira Ancha 5-10cm", emoji: "🥩", color: "#8B1A1A", tiempo: 90,
+    id: "asado-tira-ancha", nombre: "Asado de Tira Ancha 5-10cm", shortLabel: "Tira\nAncha", emoji: "🥩", color: "#8B1A1A", tiempo: 90,
     eventos: [
       { min: 0,  msg: "Colocar con el hueso hacia abajo. Fuego medio-alto.",       msg_en: "Place bone side down. Medium-high heat." },
       { min: 15, msg: "Bajar la grilla 10 cm. El hueso debe estar dorándose.",     msg_en: "Lower grill 10 cm. Bone should be browning." },
