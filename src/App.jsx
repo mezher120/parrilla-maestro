@@ -941,6 +941,15 @@ function Home({ store, go, idioma='es' }) {
             </div>
           </button>
         )}
+        {store.config?.premium && !store.config?.completo && (
+          <button onClick={() => go("premium")} style={{ width:"100%", background:"linear-gradient(135deg,#1a0d2e,#0d0720)", border:"1px solid #7c3aed55", borderRadius:16, padding:"14px 16px", marginBottom:10, cursor:"pointer", textAlign:"left" }}>
+            <div style={{ color:"#a78bfa", fontSize:13, fontWeight:900, marginBottom:4 }}>💎 {idioma==="en" ? "Upgrade to Plan Completo" : "Actualizar a Plan Completo"}</div>
+            <div style={{ color:"#6b5a8e", fontSize:11, marginBottom:10 }}>{idioma==="en" ? "AI photo analysis · $2.00/mo extra" : "Análisis IA de fotos · $2.00/mes adicional"}</div>
+            <div style={{ background:"linear-gradient(135deg,#7c3aed,#5b21b6)", borderRadius:10, padding:"9px 0", textAlign:"center", color:"white", fontSize:13, fontWeight:900 }}>
+              {idioma==="en" ? "Upgrade — $2.00/mo extra" : "Actualizar — $2.00/mes adicional"}
+            </div>
+          </button>
+        )}
         {asados.length > 0 && (
           <div style={{ display:"flex", gap:8, marginTop:4 }}>
             {[["🏆",`${avgRating(asados)}%`,"precisión"],["🔥",asados.length,"asados"],["🥩",favCorte(asados)||"—","favorito"]].map(([em,v,l]) => (
@@ -1793,6 +1802,12 @@ function Simulacion({ store, persist, go, setPendingAsado, tiempoMult=1, idioma=
   const speak = (text, _lang) => {
     if (!vozActivaRef.current) return;
     try {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'SPEAK', text, lang: idioma === "en" ? "en-US" : "es-AR"
+        }));
+        return;
+      }
       const synth = window.speechSynthesis || window.top?.speechSynthesis;
       if (!synth) return;
       synth.cancel();
@@ -2063,7 +2078,7 @@ function CameraAnalysis({ cortes, idioma, isCompleto=false, isPremium=false, onG
   const close = () => { setOpen(false); reset(); };
 
   const handleOpenAnalysis = () => {
-    if (!isPremium) { setShowPremiumModal(true); return; }
+    if (!isCompleto) { setShowPremiumModal(true); return; }
     setOpen(true);
   };
 
@@ -2101,11 +2116,11 @@ function CameraAnalysis({ cortes, idioma, isCompleto=false, isPremium=false, onG
           <div style={{ background:"linear-gradient(180deg,#1a0e2a,#120a1e)", borderRadius:"24px 24px 0 0", padding:"28px 24px 40px", width:"100%", maxWidth:440, animation:"slideUpModal .3s ease" }} onClick={e => e.stopPropagation()}>
             <div style={{ textAlign:"center", marginBottom:20 }}>
               <div style={{ fontSize:40, marginBottom:10 }}>🔒</div>
-              <div style={{ color:"#ffd700", fontSize:18, fontWeight:900, marginBottom:8 }}>{idioma==="en" ? "Premium Feature" : "Función Premium"}</div>
+              <div style={{ color:"#a78bfa", fontSize:18, fontWeight:900, marginBottom:8 }}>{idioma==="en" ? "Plan Completo Feature" : "Función Plan Completo"}</div>
               <div style={{ color:"#8b7355", fontSize:13, lineHeight:1.65 }}>
                 {idioma==="en"
-                  ? "AI photo analysis is exclusive\nto the Premium plan."
-                  : "El análisis de foto con IA es exclusivo\ndel plan Premium."}
+                  ? "AI photo analysis is exclusive to Plan Completo."
+                  : "El análisis de foto con IA es exclusivo del Plan Completo."}
               </div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -2752,12 +2767,21 @@ function Ajustes({ store, persist, go }) {
 
   const reset = () => { setIdioma('es'); setTiempoMult(100); setVozSim(false); setVoiceIndex(0); setChistes(true); };
 
+  const isNative = !!(window.ReactNativeWebView);
+
   const testVoice = () => {
+    const testText = idioma==='en' ? "Voice test. The grill is ready!" : "Probando la voz. ¡La parrilla espera!";
     try {
+      if (isNative) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'SPEAK', text: testText, lang: idioma === 'en' ? 'en-US' : 'es-AR'
+        }));
+        return;
+      }
       const synth = window.speechSynthesis;
       if (!synth) return;
       synth.cancel();
-      const utt = new SpeechSynthesisUtterance(idioma==='en' ? "Voice test. The grill is ready!" : "Probando la voz. ¡La parrilla espera!");
+      const utt = new SpeechSynthesisUtterance(testText);
       if (langVoices.length > 0) utt.voice = langVoices[Math.min(voiceIndex, langVoices.length-1)];
       utt.lang = idioma === 'en' ? 'en-US' : 'es-AR';
       utt.rate = 0.88; utt.volume = 1;
@@ -2818,28 +2842,34 @@ function Ajustes({ store, persist, go }) {
           <div style={{ color:"#6b5a3e", fontSize:11, lineHeight:1.5, marginBottom:12 }}>{t(idioma,"voz_sim_desc")}</div>
 
           {/* Voice type picker */}
-          <div style={{ marginBottom:10 }}>
-            <div style={{ color:"#ff8c42", fontSize:11, fontWeight:700, marginBottom:8 }}>🎙 {t(idioma,"tipo_voz")}</div>
-            <div style={{ color:"#555", fontSize:10, marginBottom:8 }}>{t(idioma,"tipo_voz_desc")}</div>
-            {langVoices.length === 0 ? (
-              <div style={{ color:"#3a2a1a", fontSize:11, padding:"8px 12px", background:"#0d0a07", borderRadius:8 }}>
-                {idioma==='en' ? "No voices found. Try clicking Test Voice first." : "No se encontraron voces. Tocá Probar voz primero."}
-              </div>
-            ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:160, overflowY:"auto" }}>
-                {langVoices.map((v, i) => (
-                  <button key={i} onClick={() => setVoiceIndex(i)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:voiceIndex===i?"#ff8c4222":"#0d0a07", border:`1px solid ${voiceIndex===i?"#ff8c42":"#2a1a0a"}`, borderRadius:10, cursor:"pointer", textAlign:"left", transition:"all .2s" }}>
-                    <span style={{ fontSize:16 }}>{voiceIndex===i ? "🔊" : "🔇"}</span>
-                    <div style={{ flex:1 }}>
-                      <div style={{ color:voiceIndex===i?"#ff8c42":"#c9b49a", fontSize:12, fontWeight:voiceIndex===i?700:400 }}>{v.name}</div>
-                      <div style={{ color:"#555", fontSize:10 }}>{v.lang}</div>
-                    </div>
-                    {v.localService && <span style={{ color:"#4caf50", fontSize:10 }}>local</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {isNative ? (
+            <div style={{ color:"#555", fontSize:11, padding:"8px 12px", background:"#0d0a07", borderRadius:8, marginBottom:10 }}>
+              🎙 {idioma==='en' ? "Uses the phone's built-in voice engine." : "Usa el motor de voz del celular."}
+            </div>
+          ) : (
+            <div style={{ marginBottom:10 }}>
+              <div style={{ color:"#ff8c42", fontSize:11, fontWeight:700, marginBottom:8 }}>🎙 {t(idioma,"tipo_voz")}</div>
+              <div style={{ color:"#555", fontSize:10, marginBottom:8 }}>{t(idioma,"tipo_voz_desc")}</div>
+              {langVoices.length === 0 ? (
+                <div style={{ color:"#3a2a1a", fontSize:11, padding:"8px 12px", background:"#0d0a07", borderRadius:8 }}>
+                  {idioma==='en' ? "No voices found. Try clicking Test Voice first." : "No se encontraron voces. Tocá Probar voz primero."}
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:160, overflowY:"auto" }}>
+                  {langVoices.map((v, i) => (
+                    <button key={i} onClick={() => setVoiceIndex(i)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:voiceIndex===i?"#ff8c4222":"#0d0a07", border:`1px solid ${voiceIndex===i?"#ff8c42":"#2a1a0a"}`, borderRadius:10, cursor:"pointer", textAlign:"left", transition:"all .2s" }}>
+                      <span style={{ fontSize:16 }}>{voiceIndex===i ? "🔊" : "🔇"}</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ color:voiceIndex===i?"#ff8c42":"#c9b49a", fontSize:12, fontWeight:voiceIndex===i?700:400 }}>{v.name}</div>
+                        <div style={{ color:"#555", fontSize:10 }}>{v.lang}</div>
+                      </div>
+                      {v.localService && <span style={{ color:"#4caf50", fontSize:10 }}>local</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <button onClick={testVoice} style={{ width:"100%", padding:"8px 0", background:"#ff8c4222", border:"1px solid #ff8c4244", borderRadius:10, color:"#ff8c42", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             {t(idioma,"probar_voz")}

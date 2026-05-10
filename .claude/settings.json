@@ -3,7 +3,8 @@
     "allow": [
       "Bash(ls \"c:\\\\Users\\\\jferr\\\\one-drive\\\\OneDrive\\\\Escritorio\\\\proyectos\\\\parrilla-maestro\")",
       "Read(//c/Users/jferr/one-drive/OneDrive/Escritorio/proyectos/parrilla-maestro/**)",
-      "Bash(mkdir \"c:\\\\Users\\\\jferr\\\\one-drive\\\\OneDrive\\\\Escritorio\\\\proyectos\\\\parrilla-maestro\\\\parrilla-maestro-app\")"
+      "Bash(mkdir \"c:\\\\Users\\\\jferr\\\\one-drive\\\\OneDrive\\\\Escritorio\\\\proyectos\\\\parrilla-maestro\\\\parrilla-maestro-app\")",
+      "Read(//c/Users/jferr/one-rive/one-drive/OneDrive/Escritorio/proyectos/parrilla-maestro/parrilla-maestro/src/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jferr\\one-drive\\OneDrive\\Escritorio\\proyectos\\parrilla-maestro"
