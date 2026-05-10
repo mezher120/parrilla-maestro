@@ -2067,6 +2067,28 @@ function CameraAnalysis({ cortes, idioma, isCompleto=false, isPremium=false, onG
     setOpen(true);
   };
 
+  const isNative = !!(window.ReactNativeWebView);
+
+  const requestNativePhoto = () => {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_PHOTO', source: 'camera_analysis' }));
+  };
+
+  useEffect(() => {
+    if (!isNative) return;
+    const handler = (e) => {
+      const msg = e.detail;
+      if (msg.type !== 'PHOTO_RESULT' || msg.source !== 'camera_analysis' || !msg.dataUrl) return;
+      setFoto(msg.dataUrl);
+      setResultado(null); setError(false); setLoading(true);
+      analizarFotoAsado(msg.dataUrl, cortes, idioma).then(res => {
+        setLoading(false);
+        if (res) setResultado(res); else setError(true);
+      });
+    };
+    window.addEventListener('native_message', handler);
+    return () => window.removeEventListener('native_message', handler);
+  }, [isNative, cortes, idioma]);
+
   if (!open) return (
     <>
       <button onClick={handleOpenAnalysis} style={{ margin:"8px 13px 0", width:"calc(100% - 26px)", padding:"10px 14px", background:"linear-gradient(135deg,#0d1a0d,#1a2a1a)", border:"1px solid #4caf5044", borderRadius:12, color:"#4caf50", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, flexShrink:0 }}>
@@ -2118,7 +2140,7 @@ function CameraAnalysis({ cortes, idioma, isCompleto=false, isPremium=false, onG
       )}
 
       {hasKey && !foto && (
-        <button onClick={() => fileRef.current.click()} style={{ width:"100%", height:70, background:"#0d0a07", border:"2px dashed #4caf5044", borderRadius:12, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:5 }}>
+        <button onClick={() => isNative ? requestNativePhoto() : fileRef.current.click()} style={{ width:"100%", height:70, background:"#0d0a07", border:"2px dashed #4caf5044", borderRadius:12, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:5 }}>
           <span style={{ fontSize:22 }}>📸</span>
           <span style={{ color:"#4caf50", fontSize:11 }}>{idioma==="en" ? "Take a photo of the grill" : "Sacá una foto de la parrilla"}</span>
         </button>
@@ -2177,8 +2199,28 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
   const [ciudadInput, setCiudadInput] = useState(store.user?.ciudad || '');
   const [sharing, setSharing] = useState(false);
   const fileRef = useRef();
+  const isNative = !!(window.ReactNativeWebView);
 
   const cortesData = pendingAsado?.cortesData || [];
+
+  useEffect(() => {
+    if (!isNative) return;
+    const handler = async (e) => {
+      const msg = e.detail;
+      if (msg.type !== 'PHOTO_RESULT' || msg.source !== 'calificar' || !msg.dataUrl) return;
+      const dataUrl = msg.dataUrl;
+      setFoto(dataUrl);
+      setFotoAnalisis(null);
+      if (isCompleto) {
+        setFotoAnalisisLoading(true);
+        const res = await analizarFotoAsado(dataUrl, pendingAsado?.cortes, idioma);
+        setFotoAnalisis(res);
+        setFotoAnalisisLoading(false);
+      }
+    };
+    window.addEventListener('native_message', handler);
+    return () => window.removeEventListener('native_message', handler);
+  }, [isNative, isCompleto, idioma, pendingAsado]);
 
   if (!pendingAsado) { go("home"); return null; }
 
@@ -2367,7 +2409,7 @@ function RatingScreen({ store, persist, go, pendingAsado, setPendingAsado, saveA
             )}
           </div>
         ) : (
-          <button onClick={() => fileRef.current.click()} style={{ width:"100%", height:96, background:"#1a1005", border:"2px dashed #3a2a1a", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6, marginBottom:16 }}>
+          <button onClick={() => isNative ? window.ReactNativeWebView.postMessage(JSON.stringify({ type:'REQUEST_PHOTO', source:'calificar' })) : fileRef.current.click()} style={{ width:"100%", height:96, background:"#1a1005", border:"2px dashed #3a2a1a", borderRadius:14, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6, marginBottom:16 }}>
             <span style={{ fontSize:28 }}>📷</span>
             <span style={{ color:"#555", fontSize:12 }}>{t(idioma,"foto_btn")}</span>
           </button>
